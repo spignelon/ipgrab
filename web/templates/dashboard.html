@@ -1,0 +1,89 @@
+{{define "dashboard.html"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Dashboard — IPGrab</title>
+  {{template "head" .}}
+</head>
+<body>
+  {{template "topnav" .}}
+  <main class="page">
+    <div class="page-header">
+      <h1>Dashboard</h1>
+      <a href="/admin/links" class="btn btn-primary">+ New Link</a>
+    </div>
+
+    <section class="stat-row">
+      <div class="stat-card">
+        <span class="stat-num">{{.Stats.TotalLinks}}</span>
+        <span class="stat-label">Links</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-num">{{.Stats.TotalEvents}}</span>
+        <span class="stat-label">Total Events</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-num">{{.Stats.GPSCaptures}}</span>
+        <span class="stat-label">GPS Captures</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-num">{{.Stats.UniqueIPs}}</span>
+        <span class="stat-label">Unique IPs</span>
+      </div>
+    </section>
+
+    <section class="chart-grid">
+      <div class="card">
+        <h3>Events over time</h3>
+        <canvas id="chartTime" height="120"></canvas>
+      </div>
+      <div class="card">
+        <h3>Top countries</h3>
+        <canvas id="chartCountry" height="120"></canvas>
+      </div>
+      <div class="card">
+        <h3>Device types</h3>
+        <canvas id="chartDevice" height="120"></canvas>
+      </div>
+      <div class="card">
+        <h3>Browsers</h3>
+        <canvas id="chartBrowser" height="120"></canvas>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Recent events</h3>
+      {{if not .Recent}}
+        <p class="muted">No events captured yet. Create a link and share it to start logging.</p>
+      {{else}}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Time</th><th>Link</th><th>Type</th><th>IP</th><th>Location</th><th>Device</th></tr>
+          </thead>
+          <tbody>
+            {{range .Recent}}
+            <tr>
+              <td>{{fmtTime .Timestamp}}</td>
+              <td><a href="/admin/links/{{.LinkID}}">{{if .LinkLabel}}{{.LinkLabel}}{{else}}{{.LinkSlug}}{{end}}</a></td>
+              <td><span class="badge">{{.Type}}</span></td>
+              <td>{{.IP}}</td>
+              <td>{{.City}}{{if .City}}, {{end}}{{.Country}}</td>
+              <td>{{.Device}} / {{.OS}} / {{.Browser}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{end}}
+    </section>
+  </main>
+
+  <script src="/static/chart.umd.min.js"></script>
+  <script>
+    const stats = {{toJSON .Stats}};
+  </script>
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>
+{{end}}

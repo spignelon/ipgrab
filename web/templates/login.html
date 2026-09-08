@@ -1,0 +1,25 @@
+{{define "login.html"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <title>IPGrab — Login</title>
+  {{template "head" .}}
+</head>
+<body class="auth-body">
+  <main class="auth-card">
+    <h1>🕸️ IPGrab</h1>
+    <p class="muted">Sign in to the admin dashboard.</p>
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+    <form method="post" action="/login">
+      <label>Username
+        <input type="text" name="username" required autofocus autocomplete="username">
+      </label>
+      <label>Password
+        <input type="password" name="password" required autocomplete="current-password">
+      </label>
+      <button type="submit" class="btn btn-primary">Log in</button>
+    </form>
+  </main>
+</body>
+</html>
+{{end}}

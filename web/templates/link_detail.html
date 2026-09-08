@@ -1,0 +1,83 @@
+{{define "link_detail.html"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <title>{{if .Link.Label}}{{.Link.Label}}{{else}}{{.Link.Slug}}{{end}} — IPGrab</title>
+  {{template "head" .}}
+  <link rel="stylesheet" href="/static/leaflet.css">
+</head>
+<body>
+  {{template "topnav" .}}
+  <main class="page">
+    <div class="page-header">
+      <div>
+        <a href="/admin/links" class="back-link">&larr; All links</a>
+        <h1>{{if .Link.Label}}{{.Link.Label}}{{else}}<span class="muted">(untitled)</span>{{end}}</h1>
+        <p class="muted">
+          <span class="badge">{{typeBadge .Link.Type}}</span>
+          {{if .Link.Active}}<span class="pill pill-on">Active</span>{{else}}<span class="pill pill-off">Disabled</span>{{end}}
+          &middot; created {{fmtDate .Link.CreatedAt}}
+        </p>
+      </div>
+      <a href="/admin/events.csv?link={{.Link.ID}}" class="btn btn-ghost">Export CSV</a>
+    </div>
+
+    <section class="card">
+      <label>Capture URL</label>
+      <input type="text" readonly value="{{.ShareURL}}" onclick="this.select()" class="mono full-width">
+      {{if eq .Link.Type "pixel"}}
+      <p class="muted small">Embed in HTML email: <code>&lt;img src="{{.ShareURL}}" width="1" height="1" alt=""&gt;</code></p>
+      {{end}}
+      {{if .Link.Config.Destination}}<p class="muted small">Destination: {{.Link.Config.Destination}}</p>{{end}}
+    </section>
+
+    <section class="stat-row">
+      <div class="stat-card"><span class="stat-num">{{.Stats.TotalEvents}}</span><span class="stat-label">Events</span></div>
+      <div class="stat-card"><span class="stat-num">{{.Stats.GPSCaptures}}</span><span class="stat-label">GPS Captures</span></div>
+      <div class="stat-card"><span class="stat-num">{{.Stats.UniqueIPs}}</span><span class="stat-label">Unique IPs</span></div>
+    </section>
+
+    {{if .Points}}
+    <section class="card">
+      <h3>Map</h3>
+      <div id="map" style="height:360px;border-radius:8px;"></div>
+    </section>
+    {{end}}
+
+    <section class="card">
+      <h3>Event log</h3>
+      {{if not .Events}}
+        <p class="muted">No events captured yet.</p>
+      {{else}}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Time</th><th>Type</th><th>IP</th><th>Location</th><th>ISP/Org</th><th>Device</th><th>GPS</th></tr>
+          </thead>
+          <tbody>
+            {{range .Events}}
+            <tr>
+              <td>{{fmtTime .Timestamp}}</td>
+              <td><span class="badge">{{.Type}}</span></td>
+              <td class="mono">{{.IP}}</td>
+              <td>{{.City}}{{if .City}}, {{end}}{{.Region}} {{.Country}}</td>
+              <td>{{.ISP}}</td>
+              <td>{{.Device}} / {{.OS}} / {{.Browser}}</td>
+              <td>{{if .HasGPS}}<span class="pill pill-on">{{.BestLat}}, {{.BestLon}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{end}}
+    </section>
+  </main>
+
+  <script src="/static/leaflet.js"></script>
+  <script>
+    const points = {{toJSON .Points}};
+  </script>
+  <script src="/static/link_map.js"></script>
+</body>
+</html>
+{{end}}

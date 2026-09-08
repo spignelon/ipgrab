@@ -1,0 +1,41 @@
+{{define "clone.html"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{{.Title}}</title>
+  {{if .Description}}<meta name="description" content="{{.Description}}">{{end}}
+
+  <!-- Open Graph tags so this link unfurls with a rich preview in chat apps -->
+  <meta property="og:title" content="{{.Title}}">
+  {{if .Description}}<meta property="og:description" content="{{.Description}}">{{end}}
+  {{if .Image}}<meta property="og:image" content="{{.Image}}">{{end}}
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{.BaseURL}}/p/{{.Slug}}">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f4f4f5; margin: 0; display: flex;
+           align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: #fff; border-radius: 14px; box-shadow: 0 4px 24px rgba(0,0,0,.08);
+            max-width: 420px; width: 90%; padding: 28px; text-align: center; }
+    .card img { max-width: 100%; border-radius: 10px; margin-bottom: 16px; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p { color: #555; margin: 0 0 20px; }
+    a.btn { display: inline-block; background: #2563eb; color: #fff; text-decoration: none;
+            padding: 10px 22px; border-radius: 8px; font-weight: 600; }
+    a.btn:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    {{if .Image}}<img src="{{.Image}}" alt="">{{end}}
+    <h1>{{.Title}}</h1>
+    {{if .Description}}<p>{{.Description}}</p>{{end}}
+    <a class="btn" href="/p/{{.Slug}}?go=1">Continue</a>
+  </div>
+</body>
+</html>
+{{end}}

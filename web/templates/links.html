@@ -1,0 +1,125 @@
+{{define "links.html"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Links — IPGrab</title>
+  {{template "head" .}}
+</head>
+<body>
+  {{template "topnav" .}}
+  <main class="page">
+    <div class="page-header">
+      <h1>Links</h1>
+    </div>
+
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+
+    <section class="card">
+      <h3>Create a new link</h3>
+      <form method="post" action="/admin/links" enctype="multipart/form-data" class="create-form" id="createForm">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+
+        <label>Type
+          <select name="type" id="typeSelect">
+            <option value="redirect">Redirect / Shortener</option>
+            <option value="pixel">Tracking Pixel (email)</option>
+            <option value="gps">GPS Decoy Page</option>
+            <option value="clone">Cloned Link Preview</option>
+          </select>
+        </label>
+
+        <label>Label <span class="muted">(internal note, optional)</span>
+          <input type="text" name="label" placeholder="e.g. Q3 phishing sim - target HR">
+        </label>
+
+        <label>Custom slug <span class="muted">(optional, else random)</span>
+          <input type="text" name="slug" pattern="[A-Za-z0-9_-]+" placeholder="e.g. invoice-2024">
+        </label>
+
+        <div class="field-group" data-show-for="redirect clone">
+          <label>Destination URL
+            <input type="url" name="destination" placeholder="https://example.com/real-page">
+          </label>
+        </div>
+
+        <div class="field-group" data-show-for="pixel">
+          <label>Custom image <span class="muted">(optional; else a transparent 1x1 pixel is used)</span>
+            <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp">
+          </label>
+        </div>
+
+        <div class="field-group" data-show-for="gps">
+          <label>Decoy theme
+            <select name="theme">
+              <option value="cats">Cute cat pictures</option>
+              <option value="loading">Generic "loading" page</option>
+            </select>
+          </label>
+          <label>Redirect after capture <span class="muted">(optional URL)</span>
+            <input type="url" name="destination" placeholder="https://example.com/thanks">
+          </label>
+        </div>
+
+        <div class="field-group" data-show-for="clone">
+          <label>Preview title
+            <input type="text" name="title" placeholder="Shared Document">
+          </label>
+          <label>Preview description
+            <input type="text" name="description" placeholder="Click to view the shared file">
+          </label>
+          <label>Preview image URL <span class="muted">(optional)</span>
+            <input type="url" name="og_image" placeholder="https://example.com/thumb.png">
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Create Link</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h3>All links</h3>
+      {{if not .Links}}
+        <p class="muted">No links yet — create one above.</p>
+      {{else}}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Label</th><th>Type</th><th>URL</th><th>Events</th><th>Last activity</th>
+              <th>Status</th><th>Created</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Links}}
+            <tr>
+              <td><a href="/admin/links/{{.ID}}">{{if .Label}}{{.Label}}{{else}}<span class="muted">(untitled)</span>{{end}}</a></td>
+              <td><span class="badge">{{typeBadge .Type}}</span></td>
+              <td class="mono url-cell">
+                <input type="text" readonly value="{{shareURL $.BaseURL .}}" onclick="this.select()">
+              </td>
+              <td>{{.EventCount}}</td>
+              <td>{{if .LastEvent}}{{since .LastEvent}}{{else}}<span class="muted">never</span>{{end}}</td>
+              <td>{{if .Active}}<span class="pill pill-on">Active</span>{{else}}<span class="pill pill-off">Disabled</span>{{end}}</td>
+              <td>{{fmtDate .CreatedAt}}</td>
+              <td class="row-actions">
+                <form method="post" action="/admin/links/{{.ID}}/toggle">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                  <button type="submit" class="btn btn-ghost btn-sm">{{if .Active}}Disable{{else}}Enable{{end}}</button>
+                </form>
+                <form method="post" action="/admin/links/{{.ID}}/delete" onsubmit="return confirm('Delete this link and all its captured events? This cannot be undone.');">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                  <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                </form>
+              </td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{end}}
+    </section>
+  </main>
+  <script src="/static/links.js"></script>
+</body>
+</html>
+{{end}}

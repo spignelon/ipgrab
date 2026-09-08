@@ -1,0 +1,19 @@
+{{define "head"}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="/static/app.css">
+{{end}}
+
+{{define "topnav"}}
+<header class="topbar">
+  <a class="brand" href="/admin">🕸️ IPGrab</a>
+  <nav>
+    <a href="/admin" class="{{if eq .Nav "dashboard"}}active{{end}}">Dashboard</a>
+    <a href="/admin/links" class="{{if eq .Nav "links"}}active{{end}}">Links</a>
+  </nav>
+  <form method="post" action="/logout" class="logout-form">
+    <button type="submit" class="btn btn-ghost">Log out</button>
+  </form>
+</header>
+{{end}}

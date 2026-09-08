@@ -1,0 +1,32 @@
+# Claude Code project notes — internal dev guidance, not for the public repo.
+CLAUDE.md
+
+# Runtime data: sqlite db, uploaded images, WAL/shm files.
+/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Local secrets/config — copy from .env.example instead.
+.env
+.env.local
+
+# Compiled binaries.
+/ipgrab
+/ipgrab-*
+*.exe
+*.test
+
+# Go build/test artifacts.
+*.out
+/dist/
+/bin/
+
+# Editor/OS cruft.
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Misc local envs that sometimes end up in project dirs.
+.venv/

