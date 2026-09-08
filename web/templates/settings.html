@@ -1,0 +1,49 @@
+{{define "settings.html"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <title>{{if .Concealed}}Personal settings - Nextcloud{{else}}Settings — IPGrab{{end}}</title>
+  {{template "head" .}}
+</head>
+<body>
+  {{template "topnav" .}}
+  <main class="page">
+    <div class="page-header">
+      <h1>Settings</h1>
+    </div>
+
+    <section class="card">
+      <h3>Conceal mode</h3>
+      <p class="muted">
+        When enabled, the login page, dashboard title, and site favicon disguise this instance
+        as a self-hosted Nextcloud install. A casual visitor, port scanner, or screenshot of
+        your browser tab won't see "IPGrab" anywhere — the login form still only authenticates
+        your one real admin account exactly as before, and nothing extra is captured about what
+        anyone else types into it.
+      </p>
+      <p class="notice">
+        This is cosmetic disguise only — page title, favicon, and the login screen's look. It
+        does not mimic Nextcloud's real HTTP headers, page markup, or API endpoints, so it
+        won't fool a technically thorough inspection, only a quick glance. The one-time
+        first-run <code>/setup</code> page always shows real IPGrab branding (concealment can
+        only be turned on after that account already exists) — finish setup and enable this
+        before you point a public subdomain or share any links.
+      </p>
+
+      {{if .Concealed}}
+        <p><span class="pill pill-on">Conceal mode is ON</span> — this instance currently looks like Nextcloud.</p>
+      {{else}}
+        <p><span class="pill pill-off">Conceal mode is OFF</span> — this instance shows as IPGrab.</p>
+      {{end}}
+
+      <form method="post" action="/admin/settings/conceal">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <button type="submit" class="btn {{if .Concealed}}btn-ghost{{else}}btn-primary{{end}}">
+          {{if .Concealed}}Disable conceal mode{{else}}Enable conceal mode{{end}}
+        </button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
+{{end}}

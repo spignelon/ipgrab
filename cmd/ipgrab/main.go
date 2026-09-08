@@ -51,6 +51,7 @@ func main() {
 	mux.HandleFunc("GET /g/{slug}", h.GPSPage)
 	mux.HandleFunc("POST /g/{slug}/loc", h.GPSCollect)
 	mux.HandleFunc("GET /p/{slug}", h.ClonePage)
+	mux.HandleFunc("GET /favicon.ico", h.Favicon)
 
 	// Auth + setup.
 	mux.HandleFunc("/setup", h.Setup)
@@ -66,6 +67,8 @@ func main() {
 	mux.HandleFunc("POST /admin/links/{id}/delete", am.RequireAuth(h.DeleteLink))
 	mux.HandleFunc("GET /admin/api/stats", am.RequireAuth(h.StatsAPI))
 	mux.HandleFunc("GET /admin/events.csv", am.RequireAuth(h.EventsCSV))
+	mux.HandleFunc("GET /admin/settings", am.RequireAuth(h.SettingsPage))
+	mux.HandleFunc("POST /admin/settings/conceal", am.RequireAuth(h.ToggleConceal))
 
 	// Root: send to dashboard (or setup/login as appropriate).
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {

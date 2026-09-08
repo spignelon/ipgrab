@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/spignelon/ipgrab/internal/auth"
@@ -25,6 +26,11 @@ type Handler struct {
 	Auth *auth.Manager
 	Geo  *geoip.Client
 	tmpl *template.Template
+
+	// concealed caches the "conceal mode" setting in memory so every request
+	// (including unauthenticated ones like /login and /favicon.ico) can check
+	// it without a DB round trip. Kept in sync via SetConcealed on toggle.
+	concealed atomic.Bool
 }
 
 // New constructs a Handler and parses all templates.
@@ -71,7 +77,13 @@ func New(database *db.DB, cfg *config.Config, am *auth.Manager, geo *geoip.Clien
 	if err != nil {
 		return nil, err
 	}
-	return &Handler{DB: database, Cfg: cfg, Auth: am, Geo: geo, tmpl: t}, nil
+	h := &Handler{DB: database, Cfg: cfg, Auth: am, Geo: geo, tmpl: t}
+	if enabled, err := database.ConcealEnabled(); err != nil {
+		log.Printf("WARNING: could not load conceal-mode setting, defaulting to off: %v", err)
+	} else {
+		h.concealed.Store(enabled)
+	}
+	return h, nil
 }
 
 // internalError logs the real cause server-side (so it shows up in `docker
@@ -81,10 +93,22 @@ func internalError(w http.ResponseWriter, context string, err error) {
 	http.Error(w, "internal error", http.StatusInternalServerError)
 }
 
-// render executes a named template with a base layout.
+// Concealed reports whether conceal mode is currently on.
+func (h *Handler) Concealed() bool { return h.concealed.Load() }
+
+// SetConcealed updates the in-memory conceal-mode cache. Call this right
+// after persisting the new value with DB.SetConcealEnabled.
+func (h *Handler) SetConcealed(v bool) { h.concealed.Store(v) }
+
+// render executes a named template with a base layout. Every page gets a
+// "Concealed" data key automatically so templates can switch their
+// title/favicon/branding without every call site remembering to pass it.
 func (h *Handler) render(w http.ResponseWriter, name string, data map[string]any) {
 	if data == nil {
 		data = map[string]any{}
+	}
+	if _, ok := data["Concealed"]; !ok {
+		data["Concealed"] = h.Concealed()
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.tmpl.ExecuteTemplate(w, name, data); err != nil {

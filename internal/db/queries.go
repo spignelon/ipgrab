@@ -62,6 +62,47 @@ func (db *DB) GetAdmin() (*models.Admin, error) {
 	return a, err
 }
 
+// ---- Settings ----
+
+// settingConcealEnabled is the key under which conceal-mode's on/off state
+// is stored in the settings table.
+const settingConcealEnabled = "conceal_enabled"
+
+// GetSetting returns a raw setting value, or ok=false if it has never been set.
+func (db *DB) GetSetting(key string) (value string, ok bool, err error) {
+	err = db.QueryRow(`SELECT value FROM settings WHERE key = ?`, key).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	return value, err == nil, err
+}
+
+// SetSetting upserts a raw setting value.
+func (db *DB) SetSetting(key, value string) error {
+	_, err := db.Exec(`INSERT INTO settings (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
+	return err
+}
+
+// ConcealEnabled reports whether conceal mode is currently on. Defaults to
+// false (disabled) until explicitly toggled on from the admin settings page.
+func (db *DB) ConcealEnabled() (bool, error) {
+	v, ok, err := db.GetSetting(settingConcealEnabled)
+	if err != nil || !ok {
+		return false, err
+	}
+	return v == "1", nil
+}
+
+// SetConcealEnabled persists conceal mode's on/off state.
+func (db *DB) SetConcealEnabled(enabled bool) error {
+	v := "0"
+	if enabled {
+		v = "1"
+	}
+	return db.SetSetting(settingConcealEnabled, v)
+}
+
 // ---- Sessions ----
 
 // CreateSession stores a login session token.

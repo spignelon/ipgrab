@@ -2,7 +2,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <title>{{if .Link.Label}}{{.Link.Label}}{{else}}{{.Link.Slug}}{{end}} — IPGrab</title>
+  <title>{{if .Concealed}}Files - Nextcloud{{else}}{{if .Link.Label}}{{.Link.Label}}{{else}}{{.Link.Slug}}{{end}} — IPGrab{{end}}</title>
   {{template "head" .}}
   <link rel="stylesheet" href="/static/leaflet.css">
 </head>

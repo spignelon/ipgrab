@@ -1,5 +1,6 @@
-# Claude Code project notes — internal dev guidance, not for the public repo.
+# Claude Code project notes and session state — not for the public repo.
 CLAUDE.md
+.claude/
 
 # Runtime data: sqlite db, uploaded images, WAL/shm files.
 /data/

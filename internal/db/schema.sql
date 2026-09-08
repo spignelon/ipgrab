@@ -54,3 +54,9 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS idx_events_link ON events(link_id);
 CREATE INDEX IF NOT EXISTS idx_events_ts   ON events(ts);
+
+-- Generic key/value store for instance-wide settings (e.g. conceal mode).
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);

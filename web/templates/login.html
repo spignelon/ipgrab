@@ -2,9 +2,71 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <title>IPGrab — Login</title>
+  <title>{{if .Concealed}}Log in - Nextcloud{{else}}IPGrab — Login{{end}}</title>
   {{template "head" .}}
+  {{if .Concealed}}
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: #f1f3f5; color: #222;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+    .nc-wrap { width: 100%; max-width: 340px; padding: 24px; text-align: center; }
+    .nc-logo { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 28px; }
+    .nc-logo svg { width: 42px; height: 42px; }
+    .nc-logo span { font-size: 22px; font-weight: 600; color: #0082c9; }
+    .nc-card {
+      background: #fff; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.08);
+      padding: 28px 24px; text-align: left;
+    }
+    .nc-card label { display: block; font-size: 13px; font-weight: 600; color: #444; margin: 14px 0 6px; }
+    .nc-card label:first-child { margin-top: 0; }
+    .nc-card input[type="text"], .nc-card input[type="password"] {
+      width: 100%; padding: 10px 12px; border: 1px solid #dbdbdb; border-radius: 6px;
+      font-size: 14px; background: #fafafa;
+    }
+    .nc-card input:focus { outline: none; border-color: #0082c9; background: #fff; }
+    .nc-btn {
+      width: 100%; margin-top: 20px; padding: 10px; border: none; border-radius: 6px;
+      background: #0082c9; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    .nc-btn:hover { background: #006ba3; }
+    .nc-error {
+      background: #fdeded; color: #c0392b; border-radius: 6px; padding: 8px 12px;
+      font-size: 13px; margin-bottom: 14px;
+    }
+    .nc-footer { margin-top: 20px; font-size: 12px; color: #999; }
+  </style>
+  {{end}}
 </head>
+{{if .Concealed}}
+<body>
+  <div class="nc-wrap">
+    <div class="nc-logo">
+      <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="16" cy="16" r="16" fill="#0082c9"/>
+        <circle cx="11" cy="19" r="5" fill="#fff"/>
+        <circle cx="21" cy="19" r="5" fill="#fff"/>
+        <circle cx="16" cy="13" r="6" fill="#fff"/>
+      </svg>
+      <span>Nextcloud</span>
+    </div>
+    <div class="nc-card">
+      {{if .Error}}<div class="nc-error">{{.Error}}</div>{{end}}
+      <form method="post" action="/login">
+        <label for="nc-user">Username or email</label>
+        <input id="nc-user" type="text" name="username" required autofocus autocomplete="username">
+        <label for="nc-pass">Password</label>
+        <input id="nc-pass" type="password" name="password" required autocomplete="current-password">
+        <button type="submit" class="nc-btn">Log in</button>
+      </form>
+    </div>
+    <div class="nc-footer">Nextcloud – a safe home for all your data</div>
+  </div>
+</body>
+{{else}}
 <body class="auth-body">
   <main class="auth-card">
     <h1>🕸️ IPGrab</h1>
@@ -21,5 +83,6 @@
     </form>
   </main>
 </body>
+{{end}}
 </html>
 {{end}}

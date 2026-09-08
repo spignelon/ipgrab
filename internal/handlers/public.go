@@ -26,6 +26,32 @@ var transparent1x1PNG = []byte{
 	0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 }
 
+// concealFaviconSVG is an original three-circle "cloud" mark in Nextcloud's
+// public brand blue (#0082c9) — evocative of a self-hosted cloud instance for
+// conceal mode's disguise, but not a copy of Nextcloud's actual trademarked
+// logo artwork.
+const concealFaviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
+	`<circle cx="16" cy="16" r="16" fill="#0082c9"/>` +
+	`<circle cx="11" cy="19" r="5" fill="#fff"/>` +
+	`<circle cx="21" cy="19" r="5" fill="#fff"/>` +
+	`<circle cx="16" cy="13" r="6" fill="#fff"/>` +
+	`</svg>`
+
+// Favicon handles GET /favicon.ico. Outside conceal mode this behaves exactly
+// as before (no favicon was ever served, so plain 404 — no behavior change).
+// In conceal mode it serves the disguise icon, covering browsers/crawlers
+// that request /favicon.ico directly regardless of the page's own <link
+// rel="icon"> tag.
+func (h *Handler) Favicon(w http.ResponseWriter, r *http.Request) {
+	if !h.Concealed() {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	_, _ = w.Write([]byte(concealFaviconSVG))
+}
+
 // capture builds, enriches, and stores an event for a link, returning the new
 // event id (useful for the GPS flow, which later attaches coordinates).
 func (h *Handler) capture(r *http.Request, link *models.Link, eventType string) int64 {

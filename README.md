@@ -60,6 +60,8 @@ store precise latitude/longitude/accuracy from the browser's Geolocation API.
   signed session cookies, CSRF protection on all state-changing admin actions.
 - Dashboard follows your OS/browser dark-mode setting automatically (`prefers-color-scheme`) —
   no toggle needed.
+- **Conceal mode** (Admin → Settings) — disguises the login page/title/favicon as a self-hosted
+  Nextcloud instance. See [Conceal mode](#conceal-mode-admin--settings) below.
 
 ## Known limitations (by design, not bugs)
 
@@ -137,7 +139,35 @@ needed.
 - Everything (templates + static assets) is embedded into the binary with `//go:embed`, so
   the Docker image is a single self-contained executable plus its SQLite data volume.
 
+## Conceal mode (Admin → Settings)
+
+A toggle that disguises the admin-facing surface — the login page, dashboard/page titles, and
+site favicon — as a generic self-hosted [Nextcloud](https://nextcloud.com) instance, so a
+casual visitor, port scanner, or a glance at your browser tab can't tell IPGrab is running
+here. This is the same idea as a red-team C2 team-server hiding behind a bland login page:
+infrastructure OPSEC, not a mechanism aimed at other people.
+
+- **Cosmetic only.** The disguised login form still authenticates only your one real admin
+  account, exactly like the normal login page — nothing extra is captured, logged, or stored
+  about what anyone else types into it.
+- **Doesn't survive deep inspection.** It changes titles, the favicon, and the login page's
+  look — it does not reproduce Nextcloud's real HTTP response headers, page markup, or API
+  endpoints (`/status.php`, `/ocs/`, etc.), so it defeats a quick glance, not a thorough
+  technical fingerprinting attempt.
+- **Doesn't cover first-run setup.** Conceal mode is a setting toggled from the authenticated
+  dashboard, so it can only be turned on *after* your admin account already exists — the
+  one-time `/setup` claim page always shows real IPGrab branding. Finish setup and enable
+  conceal mode *before* pointing a public subdomain at this instance or sharing any capture
+  links.
+- The icon used is an original blue "cloud" mark evocative of Nextcloud's brand color, not a
+  copy of their actual logo artwork.
+- This applies only to the admin login/dashboard. The public capture links (`/s/`, `/i/`,
+  `/g/`, `/p/`) already have their own independent per-link disguises (custom destination,
+  uploaded image, decoy theme, OG preview) set when you create each link.
+
 ## License
 
-Use, modify, and self-host freely for your own authorized security work. No warranty. See
-the disclaimer above.
+This project is licensed under the **GNU General Public License v3.0** — see
+[`LICENSE`](LICENSE) for the full text. You're free to use, modify, and self-host it, including
+for commercial engagements, provided derivative works you distribute stay under GPLv3 too. No
+warranty. This license is independent of the usage disclaimer above — both apply.

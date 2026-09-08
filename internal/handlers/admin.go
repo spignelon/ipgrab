@@ -120,6 +120,37 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
+// ---- Settings ----
+
+// SettingsPage handles GET /admin/settings.
+func (h *Handler) SettingsPage(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "settings.html", map[string]any{
+		"Nav":  "settings",
+		"CSRF": auth.CSRFToken(r),
+	})
+}
+
+// ToggleConceal handles POST /admin/settings/conceal: flips conceal mode,
+// which disguises the login page, dashboard title, and favicon as a generic
+// self-hosted Nextcloud instance so a casual visitor or port scanner can't
+// tell IPGrab is running here. It only changes cosmetics on the admin-facing
+// surface — the login form still only ever authenticates the one real admin
+// account, and nothing extra is captured or stored about what anyone else
+// types into it.
+func (h *Handler) ToggleConceal(w http.ResponseWriter, r *http.Request) {
+	if !auth.VerifyCSRF(r) {
+		http.Error(w, "invalid csrf token", http.StatusForbidden)
+		return
+	}
+	newState := !h.Concealed()
+	if err := h.DB.SetConcealEnabled(newState); err != nil {
+		internalError(w, "settings: set conceal mode", err)
+		return
+	}
+	h.SetConcealed(newState)
+	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+}
+
 // ---- Dashboard ----
 
 // Dashboard handles GET /admin.
