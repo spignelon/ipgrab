@@ -150,10 +150,19 @@ infrastructure OPSEC, not a mechanism aimed at other people.
 - **Cosmetic only.** The disguised login form still authenticates only your one real admin
   account, exactly like the normal login page — nothing extra is captured, logged, or stored
   about what anyone else types into it.
-- **Doesn't survive deep inspection.** It changes titles, the favicon, and the login page's
-  look — it does not reproduce Nextcloud's real HTTP response headers, page markup, or API
-  endpoints (`/status.php`, `/ocs/`, etc.), so it defeats a quick glance, not a thorough
-  technical fingerprinting attempt.
+- **Uses the real Nextcloud logo, favicon, and login background** — fetched from an official
+  `nextcloud` Docker image and bundled locally (`web/conceal/`, see the README there), not
+  hand-drawn approximations. The login page's exact markup, colors, and layout were captured
+  from a real running instance too, down to floating labels and the show/hide-password toggle.
+  These assets are served at paths that mirror Nextcloud's own real asset URLs
+  (`/core/img/logo/logo.svg`, etc.) rather than anything containing the word "conceal" —
+  view-source on the disguised page won't give it away.
+- **Doesn't survive deep inspection.** It's the real login page's markup/assets, but it doesn't
+  reproduce Nextcloud's actual HTTP response headers or backend API endpoints (`/status.php`,
+  `/ocs/`, `/index.php/login`, WebAuthn, etc.) — the login form posts to this app's own
+  `/login`, not a real Nextcloud backend. It defeats a visual/casual inspection, not a
+  thorough technical fingerprinting attempt (probing responses, hitting Nextcloud-specific
+  API routes that don't exist here, etc.).
 - **Doesn't cover first-run setup.** Conceal mode is a setting toggled from the authenticated
   dashboard, so it can only be turned on *after* your admin account already exists — the
   one-time `/setup` claim page always shows real IPGrab branding. Finish setup and enable

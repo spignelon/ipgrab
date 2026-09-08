@@ -14,6 +14,7 @@ import (
 	"github.com/spignelon/ipgrab/internal/db"
 	"github.com/spignelon/ipgrab/internal/models"
 	"github.com/spignelon/ipgrab/internal/uaparse"
+	"github.com/spignelon/ipgrab/web"
 )
 
 // transparent1x1PNG is a 1x1 fully transparent PNG used as the default pixel.
@@ -26,22 +27,11 @@ var transparent1x1PNG = []byte{
 	0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 }
 
-// concealFaviconSVG is an original three-circle "cloud" mark in Nextcloud's
-// public brand blue (#0082c9) — evocative of a self-hosted cloud instance for
-// conceal mode's disguise, but not a copy of Nextcloud's actual trademarked
-// logo artwork.
-const concealFaviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
-	`<circle cx="16" cy="16" r="16" fill="#0082c9"/>` +
-	`<circle cx="11" cy="19" r="5" fill="#fff"/>` +
-	`<circle cx="21" cy="19" r="5" fill="#fff"/>` +
-	`<circle cx="16" cy="13" r="6" fill="#fff"/>` +
-	`</svg>`
-
 // Favicon handles GET /favicon.ico. Outside conceal mode this behaves exactly
 // as before (no favicon was ever served, so plain 404 — no behavior change).
-// In conceal mode it serves the disguise icon, covering browsers/crawlers
-// that request /favicon.ico directly regardless of the page's own <link
-// rel="icon"> tag.
+// In conceal mode it serves the real Nextcloud favicon (web.ConcealFavicon),
+// covering browsers/crawlers that request /favicon.ico directly regardless
+// of the page's own <link rel="icon"> tag.
 func (h *Handler) Favicon(w http.ResponseWriter, r *http.Request) {
 	if !h.Concealed() {
 		http.NotFound(w, r)
@@ -49,7 +39,42 @@ func (h *Handler) Favicon(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	_, _ = w.Write([]byte(concealFaviconSVG))
+	_, _ = w.Write(web.ConcealFavicon)
+}
+
+// concealAsset writes one embedded conceal-mode asset (real Nextcloud logo,
+// core favicon, or login background), or 404s when conceal mode is off,
+// matching how every other conceal-only surface behaves.
+func (h *Handler) concealAsset(w http.ResponseWriter, contentType string, data []byte) {
+	if !h.Concealed() {
+		http.NotFound(w, nil)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	_, _ = w.Write(data)
+}
+
+// These three routes mirror Nextcloud's own real asset URLs — deliberately
+// not served under /static/, and never named "conceal" in the URL itself,
+// since that would spell out the disguise to anyone who views page source.
+
+// ConcealLogo handles GET /core/img/logo/logo.svg.
+func (h *Handler) ConcealLogo(w http.ResponseWriter, r *http.Request) {
+	h.concealAsset(w, "image/svg+xml", web.ConcealLogo)
+}
+
+// ConcealCoreFavicon handles GET /core/img/favicon.svg — the in-page icon
+// link the login page itself references (distinct from /favicon.ico above,
+// which browsers/crawlers request directly regardless of page content).
+func (h *Handler) ConcealCoreFavicon(w http.ResponseWriter, r *http.Request) {
+	h.concealAsset(w, "image/svg+xml", web.ConcealFavicon)
+}
+
+// ConcealBackground handles GET /apps/theming/img/background/jo-myoung-hee-fluid.webp
+// — Nextcloud's real default login-screen background image path.
+func (h *Handler) ConcealBackground(w http.ResponseWriter, r *http.Request) {
+	h.concealAsset(w, "image/webp", web.ConcealBackground)
 }
 
 // capture builds, enriches, and stores an event for a link, returning the new
