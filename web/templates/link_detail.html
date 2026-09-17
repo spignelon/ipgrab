@@ -26,9 +26,21 @@
       <a href="/admin/events.csv?link={{.Link.ID}}" class="btn btn-ghost">Export CSV</a>
     </div>
 
+    {{if .JustCreated}}
+    <p class="notice">&#10003; Link created. Share the capture URL below, or scan/share its QR code.</p>
+    {{end}}
+
     <section class="card">
       <label>Capture URL</label>
-      <input type="text" readonly value="{{.ShareURL}}" onclick="this.select()" class="mono full-width">
+      <div class="share-url-row">
+        <input type="text" readonly value="{{.ShareURL}}" onclick="this.select()" class="mono full-width">
+        <button type="button" class="btn btn-ghost qr-btn" title="Show QR code"
+                data-qr-url="/admin/links/{{.Link.ID}}/qr.png" data-qr-name="{{linkName .Link}}">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M3 3h7v7H3V3zm2 2v3h3V5H5zm9-2h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zm9-2h2v2h-2v-2zm3 0h2v2h-2v-2zm-6 3h2v2h-2v-2zm3 0h2v2h-2v-2zm3 0h2v2h-2v-2zm-6 3h2v2h-2v-2zm6 0h2v2h-2v-2z"/>
+          </svg>
+        </button>
+      </div>
       {{if eq .Link.Type "pixel"}}
       <p class="muted small">Embed in HTML email: <code>&lt;img src="{{.ShareURL}}" width="1" height="1" alt=""&gt;</code></p>
       {{end}}
@@ -79,12 +91,21 @@
     </section>
   </main>
 
+  <div id="qrModal" class="qr-modal" hidden>
+    <div class="qr-modal-card">
+      <button type="button" class="qr-modal-close" aria-label="Close">&times;</button>
+      <h3 id="qrModalTitle">QR code</h3>
+      <img id="qrModalImg" src="" alt="QR code" width="256" height="256">
+    </div>
+  </div>
+
   <script src="/static/leaflet.js"></script>
   <script>
     const points = {{toJSON .Points}};
   </script>
   <script src="/static/link_map.js"></script>
   <script src="/static/events.js"></script>
+  <script src="/static/links.js"></script>
 </body>
 </html>
 {{end}}

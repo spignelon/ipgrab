@@ -351,11 +351,12 @@ func (h *Handler) CreateLink(w http.ResponseWriter, r *http.Request) {
 		Config: cfg,
 		Active: true,
 	}
-	if _, err := h.DB.CreateLink(link); err != nil {
+	id, err := h.DB.CreateLink(link)
+	if err != nil {
 		http.Redirect(w, r, "/admin/links?err=Could+not+create+link", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/admin/links", http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/admin/links/%d?created=1", id), http.StatusSeeOther)
 }
 
 // saveUpload stores an uploaded "image" form file and returns its stored
@@ -445,6 +446,7 @@ func (h *Handler) LinkDetail(w http.ResponseWriter, r *http.Request) {
 		"ShareURL":    h.shareURL(link),
 		"Points":      pts,
 		"TimeToFirst": timeToFirst,
+		"JustCreated": r.URL.Query().Get("created") == "1",
 	})
 }
 

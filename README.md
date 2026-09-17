@@ -124,9 +124,18 @@ not a full browser engine.
 - **ip-api.com** (the free geolocation API this project uses) is HTTP-only and rate-limited to
   ~45 requests/minute. Results are cached in memory for 6 hours per IP to stay under that limit.
   It can be disabled entirely in Settings if you'd rather not make outbound lookups at all.
-- **The live-proxy clone engine doesn't run JavaScript.** It rewrites and relays HTML/CSS, so a
-  heavily client-side-rendered page may not look complete — this is a deliberate trade-off to
-  avoid running a headless browser (heavier, slower, larger attack surface).
+- **The live-proxy clone engine only rewrites HTML/CSS server-side; it doesn't execute
+  JavaScript itself.** The visitor's own browser still runs whatever scripts the origin page
+  ships (this is a deliberate trade-off to avoid running a headless browser server-side —
+  heavier, slower, larger attack surface). Two consequences follow: a heavily client-rendered
+  page (React/SPA-style asset loading, e.g. GitHub) may inject additional scripts at paths the
+  static rewriter never saw, so some secondary assets 404 and dynamic widgets don't work, even
+  though the initial page usually still renders correctly. And a page sitting behind active
+  bot-mitigation (Cloudflare Turnstile, AWS WAF Bot Control, hCaptcha, PerimeterX, DataDome,
+  etc.) will have its challenge relayed faithfully, but the challenge widget itself typically
+  refuses to initialize once it detects it isn't being served from the real origin — this is
+  the anti-bot vendor's own anti-proxy defense working as designed, not something a rewriting
+  proxy can complete on the visitor's behalf.
 - Not built and will not be added: fake login/credential-harvesting pages, sender/domain
   spoofing, or anti-spam/AV evasion tooling. This project stays in the "logging link" lane.
 
