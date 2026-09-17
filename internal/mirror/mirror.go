@@ -27,8 +27,8 @@ import (
 )
 
 const (
-	maxBodyBytes  = 15 << 20 // 15 MB cap on any single fetched resource
-	fetchTimeout  = 15 * time.Second
+	maxBodyBytes   = 15 << 20 // 15 MB cap on any single fetched resource
+	fetchTimeout   = 15 * time.Second
 	userAgentSpoof = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
@@ -45,6 +45,14 @@ var httpClient = &http.Client{
 	},
 }
 
+// AllowPrivateTargetsForTesting disables guardURL's loopback/private-address
+// restriction when true. It exists ONLY so the end-to-end test suite
+// (test/e2e) can point the clone engine at a local httptest server standing
+// in for a real site, without depending on the real internet in CI. It
+// defaults to false (fully guarded) and must never be set outside tests —
+// doing so reopens the exact SSRF hole guardURL exists to close.
+var AllowPrivateTargetsForTesting bool
+
 // guardURL rejects any target that resolves to a non-public address, or
 // that isn't plain http/https. Called before every fetch (initial page and
 // every sub-resource) so operators can't point the proxy at internal
@@ -60,6 +68,9 @@ func guardURL(rawURL string) error {
 	host := u.Hostname()
 	if host == "" {
 		return fmt.Errorf("missing host")
+	}
+	if AllowPrivateTargetsForTesting {
+		return nil
 	}
 	ips, err := net.LookupIP(host)
 	if err != nil {
@@ -138,6 +149,134 @@ func Serve(w http.ResponseWriter, r *http.Request, target, resourcePrefix string
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(rewritten)
 	return nil
+}
+
+// ServeRaw fetches target and relays it to w completely unmodified except
+// for one injected script before </body> (used for the GPS/fingerprint
+// beacons). Unlike Serve, it does NOT rewrite any src/href/url() reference —
+// this is what keeps a hydrated framework's client bundle seeing exactly
+// the DOM attributes it expects, so hydration succeeds. It's meant to be
+// paired with the mirror service worker (mirror-sw.js), which reroutes the
+// browser's own resource fetches through the relay endpoint at the network
+// layer instead, so nothing here needs to be rewritten server-side.
+func ServeRaw(w http.ResponseWriter, r *http.Request, target string, inject template.HTML) error {
+	resp, err := fetch(target, r)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	ct := resp.Header.Get("Content-Type")
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
+	if err != nil {
+		return err
+	}
+
+	if strings.Contains(ct, "text/html") && inject != "" {
+		raw = injectBeforeBodyCloseRaw(raw, inject)
+	}
+	if ct != "" {
+		w.Header().Set("Content-Type", ct)
+	}
+	w.WriteHeader(resp.StatusCode)
+	_, _ = w.Write(raw)
+	return nil
+}
+
+// injectBeforeBodyCloseRaw inserts script just before the last case-
+// insensitive "</body>" in html, or appends it at the end if none is found.
+// A plain byte-level insertion (rather than a full parse+reserialize) keeps
+// every other byte of the document exactly as the origin sent it.
+func injectBeforeBodyCloseRaw(html []byte, script template.HTML) []byte {
+	lower := bytes.ToLower(html)
+	idx := bytes.LastIndex(lower, []byte("</body>"))
+	if idx < 0 {
+		return append(html, []byte(script)...)
+	}
+	out := make([]byte, 0, len(html)+len(script))
+	out = append(out, html[:idx]...)
+	out = append(out, []byte(script)...)
+	out = append(out, html[idx:]...)
+	return out
+}
+
+// Relay forwards r's method, body, and a conservative subset of headers to
+// target, then relays the response back completely unmodified (status,
+// content-type, cache-control, body). This is what the mirror service
+// worker's intercepted fetches ultimately land on — no HTML/CSS rewriting
+// happens here at all, since the service worker already reroutes every
+// resource fetch at the network layer using the target's original URLs.
+func Relay(w http.ResponseWriter, r *http.Request, target string) error {
+	if err := guardURL(target); err != nil {
+		return err
+	}
+	var body io.Reader
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		body = io.LimitReader(r.Body, maxBodyBytes)
+	}
+	req, err := http.NewRequest(r.Method, target, body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", userAgentSpoof)
+	for _, h := range []string{"Content-Type", "Accept", "Accept-Language"} {
+		if v := r.Header.Get(h); v != "" {
+			req.Header.Set(h, v)
+		}
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// CSS is the one exception to "no rewriting at all": a service-worker-
+	// relayed response's reported URL is this server's own relay endpoint,
+	// not the target's, so the browser resolves any *relative* url(...)
+	// inside it against the wrong base — producing nonsense request paths
+	// that 404 (verified: a font referenced as "../media/x.woff2" resolved
+	// against the relay URL instead of the real stylesheet's own URL).
+	// Absolutizing those references (not proxy-wrapping them — just making
+	// them fully-qualified) sidesteps that entirely: the resulting fetch is
+	// then a normal cross-origin request the service worker intercepts and
+	// relays correctly on its own.
+	ct := resp.Header.Get("Content-Type")
+	if strings.Contains(ct, "text/css") {
+		raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
+		if err != nil {
+			return err
+		}
+		if base, err := url.Parse(target); err == nil {
+			raw = absolutizeCSSURLs(raw, base)
+		}
+		w.Header().Set("Content-Type", ct)
+		w.WriteHeader(resp.StatusCode)
+		_, _ = w.Write(raw)
+		return nil
+	}
+
+	copyRelevantHeaders(w, resp)
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, io.LimitReader(resp.Body, maxBodyBytes))
+	return nil
+}
+
+// absolutizeCSSURLs rewrites every relative url(...) reference in a CSS blob
+// to a fully-qualified absolute URL against base, without proxy-wrapping it
+// — see the comment in Relay for why this (and only this) needs rewriting.
+func absolutizeCSSURLs(css []byte, base *url.URL) []byte {
+	return cssURLRe.ReplaceAllFunc(css, func(m []byte) []byte {
+		sub := cssURLRe.FindSubmatch(m)
+		if sub == nil {
+			return m
+		}
+		ref := stripQuotes(strings.TrimSpace(string(sub[1])))
+		abs := resolve(base, ref)
+		if abs == "" {
+			return m
+		}
+		return []byte("url(\"" + abs + "\")")
+	})
 }
 
 // ServeResource fetches rawURL (a sub-resource of a previously mirrored

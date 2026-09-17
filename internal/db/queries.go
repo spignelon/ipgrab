@@ -73,18 +73,18 @@ const settingConcealEnabled = "conceal_enabled"
 // GPS-capture high-priority alert. All stored as plain strings in the
 // generic settings table, mirroring settingConcealEnabled above.
 const (
-	settingGeoIPEnabled      = "geoip_enabled"
-	settingWebhookType       = "webhook_type"
-	settingWebhookURL        = "webhook_url"
-	settingWebhookTopic      = "webhook_topic"
-	settingWebhookToken      = "webhook_token"
-	settingWebhookPriority   = "webhook_priority"
-	settingWebhookOnHit      = "webhook_on_hit"
-	settingWebhookAuthToken  = "webhook_auth_token"
-	settingWebhookAuthUser   = "webhook_auth_user"
-	settingWebhookAuthPass   = "webhook_auth_pass"
-	settingGPSAlertEnabled   = "gps_alert_enabled"
-	settingGPSAlertPriority  = "gps_alert_priority"
+	settingGeoIPEnabled     = "geoip_enabled"
+	settingWebhookType      = "webhook_type"
+	settingWebhookURL       = "webhook_url"
+	settingWebhookTopic     = "webhook_topic"
+	settingWebhookToken     = "webhook_token"
+	settingWebhookPriority  = "webhook_priority"
+	settingWebhookOnHit     = "webhook_on_hit"
+	settingWebhookAuthToken = "webhook_auth_token"
+	settingWebhookAuthUser  = "webhook_auth_user"
+	settingWebhookAuthPass  = "webhook_auth_pass"
+	settingGPSAlertEnabled  = "gps_alert_enabled"
+	settingGPSAlertPriority = "gps_alert_priority"
 )
 
 // GeoIPEnabled reports whether IP geolocation lookups are enabled. Defaults
@@ -107,15 +107,15 @@ func (db *DB) SetGeoIPEnabled(enabled bool) error {
 
 // WebhookSettings is the persisted webhook + GPS-alert configuration.
 type WebhookSettings struct {
-	Type      string
-	URL       string
-	Topic     string
-	Token     string // gotify application token
-	Priority  string
-	OnHit     bool
-	AuthToken string // ntfy access token (Authorization: Bearer), takes precedence over AuthUser/AuthPass
-	AuthUser  string // ntfy username, for servers requiring Basic auth
-	AuthPass  string // ntfy password
+	Type             string
+	URL              string
+	Topic            string
+	Token            string // gotify application token
+	Priority         string
+	OnHit            bool
+	AuthToken        string // ntfy access token (Authorization: Bearer), takes precedence over AuthUser/AuthPass
+	AuthUser         string // ntfy username, for servers requiring Basic auth
+	AuthPass         string // ntfy password
 	GPSAlertEnabled  bool
 	GPSAlertPriority string
 }
@@ -591,14 +591,14 @@ func (db *DB) ListEventsFiltered(linkID int64, q, typ string, offset, limit int)
 
 // Stats is an aggregate snapshot for the dashboard.
 type Stats struct {
-	TotalLinks    int              `json:"total_links"`
-	TotalEvents   int              `json:"total_events"`
-	GPSCaptures   int              `json:"gps_captures"`
-	UniqueIPs     int              `json:"unique_ips"`
-	EventsByDay   []Bucket         `json:"events_by_day"`
-	ByCountry     []Bucket         `json:"by_country"`
-	ByDevice      []Bucket         `json:"by_device"`
-	ByBrowser     []Bucket         `json:"by_browser"`
+	TotalLinks  int      `json:"total_links"`
+	TotalEvents int      `json:"total_events"`
+	GPSCaptures int      `json:"gps_captures"`
+	UniqueIPs   int      `json:"unique_ips"`
+	EventsByDay []Bucket `json:"events_by_day"`
+	ByCountry   []Bucket `json:"by_country"`
+	ByDevice    []Bucket `json:"by_device"`
+	ByBrowser   []Bucket `json:"by_browser"`
 }
 
 // Bucket is a label/count pair for charts.

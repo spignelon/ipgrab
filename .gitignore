@@ -1,5 +1,6 @@
 # Claude Code project notes and session state — not for the public repo.
 CLAUDE.md
+HANDOFF.md
 .claude/
 
 # Runtime data: sqlite db, uploaded images, WAL/shm files.

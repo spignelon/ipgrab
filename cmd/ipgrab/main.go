@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"errors"
-	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -13,12 +12,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spignelon/ipgrab/internal/app"
 	"github.com/spignelon/ipgrab/internal/auth"
 	"github.com/spignelon/ipgrab/internal/config"
 	"github.com/spignelon/ipgrab/internal/db"
 	"github.com/spignelon/ipgrab/internal/geoip"
 	"github.com/spignelon/ipgrab/internal/handlers"
-	"github.com/spignelon/ipgrab/web"
 )
 
 func main() {
@@ -39,60 +38,9 @@ func main() {
 		log.Fatalf("handlers: %v", err)
 	}
 
-	mux := http.NewServeMux()
-
-	// Static assets (embedded).
-	staticFS, _ := fs.Sub(web.Static, "static")
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
-
-	// Public capture surfaces.
-	mux.HandleFunc("GET /s/{slug}", h.Redirect)
-	mux.HandleFunc("GET /i/{slug}", h.Pixel)
-	mux.HandleFunc("GET /g/{slug}", h.GPSPage)
-	mux.HandleFunc("GET /g/{slug}/r", h.GPSResource)
-	mux.HandleFunc("POST /g/{slug}/loc", h.GPSCollect)
-	mux.HandleFunc("GET /p/{slug}", h.ClonePage)
-	mux.HandleFunc("GET /p/{slug}/r", h.ClonePageResource)
-	mux.HandleFunc("POST /p/{slug}/fp", h.ClonePageFingerprint)
-	mux.HandleFunc("GET /favicon.ico", h.Favicon)
-	// Conceal-mode assets, served at paths that mirror Nextcloud's real ones.
-	mux.HandleFunc("GET /core/img/logo/logo.svg", h.ConcealLogo)
-	mux.HandleFunc("GET /core/img/favicon.svg", h.ConcealCoreFavicon)
-	mux.HandleFunc("GET /apps/theming/img/background/jo-myoung-hee-fluid.webp", h.ConcealBackground)
-
-	// Auth + setup.
-	mux.HandleFunc("/setup", h.Setup)
-	mux.HandleFunc("/login", h.Login)
-	mux.HandleFunc("POST /logout", h.Logout)
-
-	// Admin (guarded).
-	mux.HandleFunc("GET /admin", am.RequireAuth(h.Dashboard))
-	mux.HandleFunc("GET /admin/links", am.RequireAuth(h.LinksList))
-	mux.HandleFunc("POST /admin/links", am.RequireAuth(h.CreateLink))
-	mux.HandleFunc("GET /admin/links/{id}", am.RequireAuth(h.LinkDetail))
-	mux.HandleFunc("GET /admin/links/{id}/qr.png", am.RequireAuth(h.LinkQR))
-	mux.HandleFunc("POST /admin/links/{id}/toggle", am.RequireAuth(h.ToggleLink))
-	mux.HandleFunc("POST /admin/links/{id}/delete", am.RequireAuth(h.DeleteLink))
-	mux.HandleFunc("POST /admin/links/delete", am.RequireAuth(h.DeleteLinksBulk))
-	mux.HandleFunc("GET /admin/events", am.RequireAuth(h.EventsPage))
-	mux.HandleFunc("GET /admin/api/events", am.RequireAuth(h.EventsAPI))
-	mux.HandleFunc("POST /admin/api/events/delete", am.RequireAuth(h.EventsDelete))
-	mux.HandleFunc("GET /admin/api/stats", am.RequireAuth(h.StatsAPI))
-	mux.HandleFunc("GET /admin/events.csv", am.RequireAuth(h.EventsCSV))
-	mux.HandleFunc("GET /admin/settings", am.RequireAuth(h.SettingsPage))
-	mux.HandleFunc("POST /admin/settings/conceal", am.RequireAuth(h.ToggleConceal))
-	mux.HandleFunc("POST /admin/settings/webhook", am.RequireAuth(h.SaveWebhook))
-	mux.HandleFunc("POST /admin/settings/webhook/test", am.RequireAuth(h.TestWebhook))
-	mux.HandleFunc("POST /admin/settings/geoip", am.RequireAuth(h.ToggleGeoIP))
-
-	// Root: send to dashboard (or setup/login as appropriate).
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/admin", http.StatusSeeOther)
-	})
-
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           logRequests(mux),
+		Handler:           app.NewMux(h, am),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -113,13 +61,4 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
-}
-
-// logRequests is a minimal access-log middleware.
-func logRequests(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		next.ServeHTTP(w, r)
-		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(start).Round(time.Millisecond))
-	})
 }
