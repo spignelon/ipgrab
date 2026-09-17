@@ -122,6 +122,8 @@ body { margin: 0; background: var(--bg); color: var(--text); }
   padding: 20px; margin-bottom: 20px;
 }
 .card h3 { margin-top: 0; }
+.card-header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.card-header-row h3 { margin: 0; }
 
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
 .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
@@ -213,6 +215,6 @@ input.full-width { width: 100%; }
 .events-toolbar button { white-space: nowrap; }
 .events-sentinel { height: 1px; }
 .events-status { text-align: center; color: var(--muted); font-size: 13px; padding: 12px 0; }
-.event-select-cell, .event-delete-cell { width: 1%; white-space: nowrap; }
+.select-cell, .event-delete-cell { width: 1%; white-space: nowrap; }
 .event-delete-btn { display: inline-flex; align-items: center; justify-content: center; padding: 5px 8px; }
 .event-delete-btn svg { display: block; }

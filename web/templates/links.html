@@ -86,7 +86,14 @@
     </section>
 
     <section class="card">
-      <h3>All links</h3>
+      <div class="card-header-row">
+        <h3>All links</h3>
+        <form id="linksBulkForm" method="post" action="/admin/links/delete"
+              onsubmit="return confirm('Delete the selected links and all their captured events? This cannot be undone.');">
+          <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+          <button type="submit" id="linksDeleteSelected" class="btn btn-danger btn-sm" disabled>Delete selected</button>
+        </form>
+      </div>
       {{if not .Links}}
         <p class="muted">No links yet — create one above.</p>
       {{else}}
@@ -94,6 +101,7 @@
         <table>
           <thead>
             <tr>
+              <th class="select-cell"><input type="checkbox" id="linksSelectAll" title="Select all"></th>
               <th>Label</th><th>Type</th><th>URL</th><th></th><th>Events</th><th>Last activity</th>
               <th>Status</th><th>Created</th><th></th>
             </tr>
@@ -101,6 +109,7 @@
           <tbody>
             {{range .Links}}
             <tr>
+              <td class="select-cell"><input type="checkbox" name="ids" value="{{.ID}}" form="linksBulkForm" class="link-select"></td>
               <td><a href="/admin/links/{{.ID}}">{{linkName .}}</a></td>
               <td><span class="badge">{{typeBadge .Type}}</span></td>
               <td class="mono url-cell">

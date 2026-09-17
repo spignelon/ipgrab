@@ -502,6 +502,29 @@ func (h *Handler) DeleteLink(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/links", http.StatusSeeOther)
 }
 
+// DeleteLinksBulk handles POST /admin/links/delete: deletes multiple links
+// (and their events, via cascade) selected via checkboxes on the links page.
+func (h *Handler) DeleteLinksBulk(w http.ResponseWriter, r *http.Request) {
+	if !auth.VerifyCSRF(r) {
+		http.Error(w, "invalid csrf token", http.StatusForbidden)
+		return
+	}
+	var ids []int64
+	for _, s := range r.Form["ids"] {
+		if id := atoi64(s); id > 0 {
+			ids = append(ids, id)
+		}
+	}
+	for _, id := range ids {
+		// Best-effort cleanup of a custom pixel image, same as single delete.
+		if link, err := h.DB.GetLink(id); err == nil && link.Config.ImagePath != "" {
+			_ = os.Remove(filepath.Join(h.Cfg.UploadsDir(), filepath.Base(link.Config.ImagePath)))
+		}
+	}
+	_ = h.DB.DeleteLinks(ids)
+	http.Redirect(w, r, "/admin/links", http.StatusSeeOther)
+}
+
 // ---- Events (global log page + search/pagination API) ----
 
 // EventsPage handles GET /admin/events: a global event log across every

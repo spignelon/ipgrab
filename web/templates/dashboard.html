@@ -52,7 +52,10 @@
     </section>
 
     <section class="card">
-      <h3>Recent events</h3>
+      <div class="card-header-row">
+        <h3>Recent events</h3>
+        <a href="/admin/events" class="btn btn-ghost btn-sm">View all events &rarr;</a>
+      </div>
       {{if not .Recent}}
         <p class="muted">No events captured yet. Create a link and share it to start logging.</p>
       {{else}}

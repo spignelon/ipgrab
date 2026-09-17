@@ -73,6 +73,7 @@ func main() {
 	mux.HandleFunc("GET /admin/links/{id}/qr.png", am.RequireAuth(h.LinkQR))
 	mux.HandleFunc("POST /admin/links/{id}/toggle", am.RequireAuth(h.ToggleLink))
 	mux.HandleFunc("POST /admin/links/{id}/delete", am.RequireAuth(h.DeleteLink))
+	mux.HandleFunc("POST /admin/links/delete", am.RequireAuth(h.DeleteLinksBulk))
 	mux.HandleFunc("GET /admin/events", am.RequireAuth(h.EventsPage))
 	mux.HandleFunc("GET /admin/api/events", am.RequireAuth(h.EventsAPI))
 	mux.HandleFunc("POST /admin/api/events/delete", am.RequireAuth(h.EventsDelete))

@@ -1,3 +1,29 @@
+// Select-all + count-aware "Delete selected" button for the links table
+// (mirrors the same pattern on the event log — see events.js).
+(function () {
+  const selectAll = document.getElementById("linksSelectAll");
+  const deleteBtn = document.getElementById("linksDeleteSelected");
+  if (!selectAll || !deleteBtn) return;
+
+  const checkboxes = () => Array.from(document.querySelectorAll(".link-select"));
+
+  function update() {
+    const all = checkboxes();
+    const checked = all.filter((cb) => cb.checked);
+    deleteBtn.disabled = checked.length === 0;
+    deleteBtn.textContent = checked.length > 0 ? "Delete selected (" + checked.length + ")" : "Delete selected";
+    selectAll.checked = all.length > 0 && checked.length === all.length;
+    selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+  }
+
+  selectAll.addEventListener("change", () => {
+    checkboxes().forEach((cb) => (cb.checked = selectAll.checked));
+    update();
+  });
+  checkboxes().forEach((cb) => cb.addEventListener("change", update));
+  update();
+})();
+
 // Shows/hides the type-specific fields on the "create link" form based on the
 // selected link type.
 (function () {

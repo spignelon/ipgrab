@@ -49,7 +49,7 @@
       : "";
     return (
       "<tr data-id=\"" + e.ID + "\">" +
-      "<td class=\"event-select-cell\"><input type=\"checkbox\" class=\"event-select\" value=\"" + e.ID + "\"></td>" +
+      "<td class=\"select-cell\"><input type=\"checkbox\" class=\"event-select\" value=\"" + e.ID + "\"></td>" +
       "<td class=\"event-delete-cell\"><button type=\"button\" class=\"btn btn-ghost btn-sm event-delete-btn\" data-id=\"" + e.ID + "\" title=\"Delete event\">" + trashIcon + "</button></td>" +
       "<td>" + esc(new Date(e.Timestamp).toLocaleString()) + "</td>" +
       linkCell +

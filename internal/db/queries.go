@@ -399,6 +399,22 @@ func (db *DB) DeleteLink(id int64) error {
 	return err
 }
 
+// DeleteLinks removes the links with the given ids (and, via ON DELETE
+// CASCADE, their events). No-op if ids is empty.
+func (db *DB) DeleteLinks(ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	_, err := db.Exec(`DELETE FROM links WHERE id IN (`+strings.Join(placeholders, ",")+`)`, args...)
+	return err
+}
+
 // ---- Events ----
 
 // InsertEvent stores a capture record and returns its id.
