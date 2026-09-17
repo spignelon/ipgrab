@@ -5,13 +5,7 @@ security assessments — OSINT gathering, phishing-simulation exercises, and phy
 audit engagements. Single admin account, single Docker container, SQLite storage, no external
 accounts required.
 
-**Lightweight by design:** a single statically-linked Go binary (no cgo, no JVM, no Node
-runtime) with everything — templates, static assets, even the SQLite driver — compiled in.
-The Docker image is **~23 MB**, and the running container idles at **~24 MB of RAM** (measured
-via `docker stats`) with light traffic — it'll grow a little under real concurrent load, but
-there's no heavy in-memory cache or background worker driving it up. Disk usage is just the
-SQLite database file itself, typically well under a few MB even after thousands of captured
-events.
+Lightweight: Docker image is **~23 MB**, container idles at **~24 MB RAM**.
 
 > Same category as Grabify, IPLogger, GoPhish, and Canarytokens — for people who already run
 > these kinds of engagements professionally and want a self-hosted alternative they control.
