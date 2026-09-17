@@ -75,6 +75,7 @@ func main() {
 	mux.HandleFunc("POST /admin/links/{id}/delete", am.RequireAuth(h.DeleteLink))
 	mux.HandleFunc("GET /admin/events", am.RequireAuth(h.EventsPage))
 	mux.HandleFunc("GET /admin/api/events", am.RequireAuth(h.EventsAPI))
+	mux.HandleFunc("POST /admin/api/events/delete", am.RequireAuth(h.EventsDelete))
 	mux.HandleFunc("GET /admin/api/stats", am.RequireAuth(h.StatsAPI))
 	mux.HandleFunc("GET /admin/events.csv", am.RequireAuth(h.EventsCSV))
 	mux.HandleFunc("GET /admin/settings", am.RequireAuth(h.SettingsPage))

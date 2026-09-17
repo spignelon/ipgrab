@@ -52,7 +52,7 @@
 
     <section class="card">
       <h3>Event log</h3>
-      <div id="eventsRoot" data-link="{{.Link.ID}}" data-show-link-col="0">
+      <div id="eventsRoot" data-link="{{.Link.ID}}" data-show-link-col="0" data-csrf="{{.CSRF}}">
         <div class="events-toolbar">
           <input type="search" id="eventsSearch" placeholder="Search IP, location, ISP, device…">
           <select id="eventsType">
@@ -62,11 +62,12 @@
             <option value="pixel_open">Pixel open</option>
             <option value="gps">GPS capture</option>
           </select>
+          <button type="button" id="eventsDeleteSelected" class="btn btn-danger btn-sm" disabled>Delete selected</button>
         </div>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Time</th><th>Type</th><th>IP</th><th>Location</th><th>ISP/Org</th><th>Device</th><th>GPS</th></tr>
+              <tr><th><input type="checkbox" id="eventsSelectAll" title="Select all"></th><th></th><th>Time</th><th>Type</th><th>IP</th><th>Location</th><th>ISP/Org</th><th>Device</th><th>GPS</th></tr>
             </thead>
             <tbody id="eventsBody"></tbody>
           </table>

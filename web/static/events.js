@@ -1,18 +1,28 @@
 // Drives the event log on both the global "Events" page and a single link's
-// detail page: debounced search, a type filter, and infinite scroll via
-// IntersectionObserver against the paginated /admin/api/events endpoint.
+// detail page: debounced search, a type filter, infinite scroll via
+// IntersectionObserver against the paginated /admin/api/events endpoint, and
+// single/bulk delete against /admin/api/events/delete.
 (function () {
   const root = document.getElementById("eventsRoot");
   if (!root) return;
 
   const linkID = root.dataset.link || "";
   const showLinkCol = root.dataset.showLinkCol === "1";
+  const csrfToken = root.dataset.csrf || "";
+  const totalCols = (showLinkCol ? 8 : 7) + 2; // data columns + checkbox + delete
 
   const searchInput = document.getElementById("eventsSearch");
   const typeSelect = document.getElementById("eventsType");
   const tbody = document.getElementById("eventsBody");
   const status = document.getElementById("eventsStatus");
   const sentinel = document.getElementById("eventsSentinel");
+  const selectAll = document.getElementById("eventsSelectAll");
+  const deleteSelectedBtn = document.getElementById("eventsDeleteSelected");
+
+  const trashIcon =
+    '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">' +
+    '<path d="M9 3h6l1 2h4v2H4V5h4l1-2zm-3 6h12l-1 12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 9zm3 2v8h2v-8H9zm4 0v8h2v-8h-2z"/>' +
+    "</svg>";
 
   let offset = 0;
   let loading = false;
@@ -38,7 +48,9 @@
       ? "<td><a href=\"/admin/links/" + e.LinkID + "\">" + esc(e.LinkLabel || ("#" + e.LinkID)) + "</a></td>"
       : "";
     return (
-      "<tr>" +
+      "<tr data-id=\"" + e.ID + "\">" +
+      "<td class=\"event-select-cell\"><input type=\"checkbox\" class=\"event-select\" value=\"" + e.ID + "\"></td>" +
+      "<td class=\"event-delete-cell\"><button type=\"button\" class=\"btn btn-ghost btn-sm event-delete-btn\" data-id=\"" + e.ID + "\" title=\"Delete event\">" + trashIcon + "</button></td>" +
       "<td>" + esc(new Date(e.Timestamp).toLocaleString()) + "</td>" +
       linkCell +
       "<td>" + typeBadge(e.Type) + "</td>" +
@@ -64,6 +76,9 @@
     offset = 0;
     hasMore = true;
     tbody.innerHTML = "";
+    selectAll.checked = false;
+    selectAll.indeterminate = false;
+    updateDeleteButton();
     load();
   }
 
@@ -79,7 +94,7 @@
         if (seq !== requestSeq) return; // a newer search superseded this request
         const events = data.events || [];
         if (events.length === 0 && offset === 0) {
-          tbody.innerHTML = "<tr><td colspan=\"8\" class=\"muted\">No events match.</td></tr>";
+          tbody.innerHTML = "<tr><td colspan=\"" + totalCols + "\" class=\"muted\">No events match.</td></tr>";
         } else {
           tbody.insertAdjacentHTML("beforeend", events.map(rowHTML).join(""));
         }
@@ -94,6 +109,83 @@
         loading = false;
       });
   }
+
+  function selectedCheckboxes() {
+    return Array.from(tbody.querySelectorAll(".event-select:checked"));
+  }
+
+  function updateDeleteButton() {
+    const n = selectedCheckboxes().length;
+    deleteSelectedBtn.disabled = n === 0;
+    deleteSelectedBtn.textContent = n > 0 ? "Delete selected (" + n + ")" : "Delete selected";
+
+    const all = tbody.querySelectorAll(".event-select");
+    if (all.length === 0) {
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
+    } else {
+      selectAll.checked = n === all.length;
+      selectAll.indeterminate = n > 0 && n < all.length;
+    }
+  }
+
+  function deleteEvents(ids) {
+    const body = new URLSearchParams();
+    body.set("csrf_token", csrfToken);
+    ids.forEach((id) => body.append("ids", id));
+    return fetch("/admin/api/events/delete", { method: "POST", body }).then((r) => {
+      if (!r.ok) throw new Error("delete failed");
+      return r.json();
+    });
+  }
+
+  selectAll.addEventListener("change", () => {
+    tbody.querySelectorAll(".event-select").forEach((cb) => (cb.checked = selectAll.checked));
+    updateDeleteButton();
+  });
+
+  tbody.addEventListener("change", (e) => {
+    if (e.target.classList.contains("event-select")) updateDeleteButton();
+  });
+
+  tbody.addEventListener("click", (e) => {
+    const btn = e.target.closest(".event-delete-btn");
+    if (!btn) return;
+    if (!confirm("Delete this event? This cannot be undone.")) return;
+    const id = btn.dataset.id;
+    btn.disabled = true;
+    deleteEvents([id])
+      .then(() => {
+        const row = tbody.querySelector('tr[data-id="' + id + '"]');
+        if (row) row.remove();
+        updateDeleteButton();
+        if (!tbody.querySelector("tr")) reset();
+      })
+      .catch(() => {
+        status.textContent = "Could not delete event.";
+        btn.disabled = false;
+      });
+  });
+
+  deleteSelectedBtn.addEventListener("click", () => {
+    const ids = selectedCheckboxes().map((cb) => cb.value);
+    if (ids.length === 0) return;
+    if (!confirm("Delete " + ids.length + " selected event" + (ids.length > 1 ? "s" : "") + "? This cannot be undone.")) return;
+    deleteSelectedBtn.disabled = true;
+    deleteEvents(ids)
+      .then(() => {
+        ids.forEach((id) => {
+          const row = tbody.querySelector('tr[data-id="' + id + '"]');
+          if (row) row.remove();
+        });
+        updateDeleteButton();
+        if (!tbody.querySelector("tr")) reset();
+      })
+      .catch(() => {
+        status.textContent = "Could not delete selected events.";
+        updateDeleteButton();
+      });
+  });
 
   let debounceTimer;
   searchInput.addEventListener("input", () => {

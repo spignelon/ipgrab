@@ -149,12 +149,13 @@ tbody tr:hover { background: var(--hover-bg); }
   display: inline-block; border: none; border-radius: 8px; padding: 9px 16px;
   font-weight: 600; font-size: 14px; cursor: pointer; text-decoration: none;
 }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:hover { background: var(--primary-dark); }
+.btn-primary:not(:disabled):hover { background: var(--primary-dark); }
 .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
-.btn-ghost:hover { background: var(--hover-bg); }
+.btn-ghost:not(:disabled):hover { background: var(--hover-bg); }
 .btn-danger { background: var(--danger-bg); color: var(--danger); }
-.btn-danger:hover { background: var(--danger-bg-hover); color: var(--danger-dark); }
+.btn-danger:not(:disabled):hover { background: var(--danger-bg-hover); color: var(--danger-dark); }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
 .row-actions { display: flex; gap: 6px; }
 .row-actions form { margin: 0; display: inline; }
@@ -182,7 +183,8 @@ input.full-width { width: 100%; }
 .auth-card h1 { text-align: center; margin-top: 0; }
 
 /* QR code popup modal */
-.qr-btn { font-size: 16px; line-height: 1; padding: 6px 10px; }
+.qr-btn { display: inline-flex; align-items: center; justify-content: center; padding: 6px 10px; }
+.qr-btn svg { display: block; }
 .qr-modal {
   position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
   align-items: center; justify-content: center; z-index: 1000;
@@ -205,8 +207,12 @@ input.full-width { width: 100%; }
 .checkbox-label input[type="checkbox"] { width: auto; }
 
 /* Event log: search/filter bar + infinite-scroll list (events.js) */
-.events-toolbar { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.events-toolbar { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
 .events-toolbar input[type="search"] { flex: 1; min-width: 200px; margin-bottom: 0; }
 .events-toolbar select { margin-bottom: 0; }
+.events-toolbar button { white-space: nowrap; }
 .events-sentinel { height: 1px; }
 .events-status { text-align: center; color: var(--muted); font-size: 13px; padding: 12px 0; }
+.event-select-cell, .event-delete-cell { width: 1%; white-space: nowrap; }
+.event-delete-btn { display: inline-flex; align-items: center; justify-content: center; padding: 5px 8px; }
+.event-delete-btn svg { display: block; }

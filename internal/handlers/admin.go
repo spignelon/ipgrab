@@ -508,7 +508,8 @@ func (h *Handler) DeleteLink(w http.ResponseWriter, r *http.Request) {
 // link, with client-side search/filter and infinite scroll (see events.js).
 func (h *Handler) EventsPage(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "events.html", map[string]any{
-		"Nav": "events",
+		"Nav":  "events",
+		"CSRF": auth.CSRFToken(r),
 	})
 }
 
@@ -544,6 +545,32 @@ func (h *Handler) EventsAPI(w http.ResponseWriter, r *http.Request) {
 		"events":   events,
 		"has_more": hasMore,
 	})
+}
+
+// EventsDelete handles POST /admin/api/events/delete: deletes one or more
+// event rows by id, used by both the per-row delete button and the
+// select-multiple bulk delete on the event log (see events.js).
+func (h *Handler) EventsDelete(w http.ResponseWriter, r *http.Request) {
+	if !auth.VerifyCSRF(r) {
+		http.Error(w, "invalid csrf token", http.StatusForbidden)
+		return
+	}
+	var ids []int64
+	for _, s := range r.Form["ids"] {
+		if id := atoi64(s); id > 0 {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		http.Error(w, "no ids given", http.StatusBadRequest)
+		return
+	}
+	if err := h.DB.DeleteEvents(ids); err != nil {
+		internalError(w, "events: delete", err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"deleted": len(ids)})
 }
 
 // ---- Stats API + CSV ----

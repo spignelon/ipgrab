@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/spignelon/ipgrab/internal/models"
@@ -439,6 +440,21 @@ func (db *DB) AttachFingerprint(id int64, fp map[string]string) error {
 		return err
 	}
 	_, err = db.Exec(`UPDATE events SET headers_json = ? WHERE id = ?`, string(b), id)
+	return err
+}
+
+// DeleteEvents removes the events with the given ids. No-op if ids is empty.
+func (db *DB) DeleteEvents(ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	_, err := db.Exec(`DELETE FROM events WHERE id IN (`+strings.Join(placeholders, ",")+`)`, args...)
 	return err
 }
 
