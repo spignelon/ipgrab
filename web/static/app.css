@@ -180,3 +180,32 @@ input.full-width { width: 100%; }
 .auth-body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
 .auth-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 32px; width: 360px; }
 .auth-card h1 { text-align: center; margin-top: 0; }
+
+/* QR code popup modal */
+.qr-btn { font-size: 16px; line-height: 1; padding: 6px 10px; }
+.qr-modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
+  align-items: center; justify-content: center; z-index: 1000;
+}
+.qr-modal-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 24px; position: relative; text-align: center;
+}
+.qr-modal-card h3 { margin: 0 0 16px; font-size: 15px; }
+.qr-modal-card img { display: block; border-radius: 8px; background: #fff; padding: 8px; }
+.qr-modal-close {
+  position: absolute; top: 8px; right: 12px; background: none; border: none;
+  font-size: 22px; line-height: 1; cursor: pointer; color: var(--muted);
+}
+.qr-modal-close:hover { color: var(--text); }
+
+.settings-form h4 { margin: 18px 0 4px; font-size: 14px; }
+.checkbox-label { flex-direction: row !important; align-items: center; gap: 8px !important; font-weight: 400 !important; }
+.checkbox-label input[type="checkbox"] { width: auto; }
+
+/* Event log: search/filter bar + infinite-scroll list (events.js) */
+.events-toolbar { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.events-toolbar input[type="search"] { flex: 1; min-width: 200px; margin-bottom: 0; }
+.events-toolbar select { margin-bottom: 0; }
+.events-sentinel { height: 1px; }
+.events-status { text-align: center; color: var(--muted); font-size: 13px; padding: 12px 0; }

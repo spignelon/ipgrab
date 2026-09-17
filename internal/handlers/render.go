@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/spignelon/ipgrab/internal/db"
 	"github.com/spignelon/ipgrab/internal/geoip"
 	"github.com/spignelon/ipgrab/internal/models"
+	"github.com/spignelon/ipgrab/internal/notify"
 	"github.com/spignelon/ipgrab/web"
 )
 
@@ -31,6 +33,15 @@ type Handler struct {
 	// (including unauthenticated ones like /login and /favicon.ico) can check
 	// it without a DB round trip. Kept in sync via SetConcealed on toggle.
 	concealed atomic.Bool
+
+	// geoipEnabled caches the GeoIP on/off toggle, so capture() can skip the
+	// ip-api.com lookup on every hit without a DB round trip.
+	geoipEnabled atomic.Bool
+
+	// notifyMu guards notifyCfg, refreshed whenever the webhook/GPS-alert
+	// settings are saved from the admin Settings page.
+	notifyMu  sync.RWMutex
+	notifyCfg notify.Config
 }
 
 // New constructs a Handler and parses all templates.
@@ -72,6 +83,7 @@ func New(database *db.DB, cfg *config.Config, am *auth.Manager, geo *geoip.Clien
 			}
 			return template.JS(b)
 		},
+		"linkName": func(l *models.Link) string { return l.DisplayName() },
 	}
 	t, err := template.New("").Funcs(funcs).ParseFS(web.Templates, "templates/*.html")
 	if err != nil {
@@ -83,7 +95,54 @@ func New(database *db.DB, cfg *config.Config, am *auth.Manager, geo *geoip.Clien
 	} else {
 		h.concealed.Store(enabled)
 	}
+	if enabled, err := database.GeoIPEnabled(); err != nil {
+		log.Printf("WARNING: could not load geoip-enabled setting, defaulting to on: %v", err)
+		h.geoipEnabled.Store(true)
+	} else {
+		h.geoipEnabled.Store(enabled)
+	}
+	h.reloadNotifyConfig()
 	return h, nil
+}
+
+// GeoIPEnabled reports whether IP geolocation lookups are currently enabled.
+func (h *Handler) GeoIPEnabled() bool { return h.geoipEnabled.Load() }
+
+// SetGeoIPEnabled updates the in-memory GeoIP toggle cache. Call this right
+// after persisting the new value with DB.SetGeoIPEnabled.
+func (h *Handler) SetGeoIPEnabled(v bool) { h.geoipEnabled.Store(v) }
+
+// NotifyConfig returns a snapshot of the current webhook/GPS-alert settings.
+func (h *Handler) NotifyConfig() notify.Config {
+	h.notifyMu.RLock()
+	defer h.notifyMu.RUnlock()
+	return h.notifyCfg
+}
+
+// reloadNotifyConfig re-reads the webhook + GPS-alert settings from the DB
+// into the in-memory cache. Call after saving either from Settings.
+func (h *Handler) reloadNotifyConfig() {
+	ws, err := h.DB.GetWebhookSettings()
+	if err != nil {
+		log.Printf("WARNING: could not load webhook settings: %v", err)
+		return
+	}
+	cfg := notify.Config{
+		Type:             ws.Type,
+		URL:              ws.URL,
+		Topic:            ws.Topic,
+		Token:            ws.Token,
+		Priority:         ws.Priority,
+		OnHit:            ws.OnHit,
+		AuthToken:        ws.AuthToken,
+		AuthUser:         ws.AuthUser,
+		AuthPass:         ws.AuthPass,
+		GPSAlertEnabled:  ws.GPSAlertEnabled,
+		GPSAlertPriority: ws.GPSAlertPriority,
+	}
+	h.notifyMu.Lock()
+	h.notifyCfg = cfg
+	h.notifyMu.Unlock()
 }
 
 // internalError logs the real cause server-side (so it shows up in `docker

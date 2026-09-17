@@ -1,0 +1,44 @@
+{{define "events.html"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <title>{{if .Concealed}}Activity - Nextcloud{{else}}Events — IPGrab{{end}}</title>
+  {{template "head" .}}
+</head>
+<body>
+  {{template "topnav" .}}
+  <main class="page">
+    <div class="page-header">
+      <h1>Events</h1>
+    </div>
+
+    <section class="card">
+      <div id="eventsRoot" data-show-link-col="1">
+        <div class="events-toolbar">
+          <input type="search" id="eventsSearch" placeholder="Search IP, location, ISP, device, link…">
+          <select id="eventsType">
+            <option value="">All types</option>
+            <option value="view">View</option>
+            <option value="click">Click</option>
+            <option value="pixel_open">Pixel open</option>
+            <option value="gps">GPS capture</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Time</th><th>Link</th><th>Type</th><th>IP</th><th>Location</th><th>ISP/Org</th><th>Device</th><th>GPS</th></tr>
+            </thead>
+            <tbody id="eventsBody"></tbody>
+          </table>
+        </div>
+        <div class="events-sentinel" id="eventsSentinel"></div>
+        <p class="events-status" id="eventsStatus"></p>
+      </div>
+      <noscript><p class="muted">Enable JavaScript to browse the event log, or use <a href="/admin/events.csv">CSV export</a>.</p></noscript>
+    </section>
+  </main>
+  <script src="/static/events.js"></script>
+</body>
+</html>
+{{end}}

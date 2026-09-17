@@ -68,6 +68,124 @@ func (db *DB) GetAdmin() (*models.Admin, error) {
 // is stored in the settings table.
 const settingConcealEnabled = "conceal_enabled"
 
+// Settings keys for GeoIP toggle, webhook notifications, and the separate
+// GPS-capture high-priority alert. All stored as plain strings in the
+// generic settings table, mirroring settingConcealEnabled above.
+const (
+	settingGeoIPEnabled      = "geoip_enabled"
+	settingWebhookType       = "webhook_type"
+	settingWebhookURL        = "webhook_url"
+	settingWebhookTopic      = "webhook_topic"
+	settingWebhookToken      = "webhook_token"
+	settingWebhookPriority   = "webhook_priority"
+	settingWebhookOnHit      = "webhook_on_hit"
+	settingWebhookAuthToken  = "webhook_auth_token"
+	settingWebhookAuthUser   = "webhook_auth_user"
+	settingWebhookAuthPass   = "webhook_auth_pass"
+	settingGPSAlertEnabled   = "gps_alert_enabled"
+	settingGPSAlertPriority  = "gps_alert_priority"
+)
+
+// GeoIPEnabled reports whether IP geolocation lookups are enabled. Defaults
+// to true (enabled) until explicitly turned off from Settings.
+func (db *DB) GeoIPEnabled() (bool, error) {
+	v, ok, err := db.GetSetting(settingGeoIPEnabled)
+	if err != nil {
+		return true, err
+	}
+	if !ok {
+		return true, nil
+	}
+	return v == "1", nil
+}
+
+// SetGeoIPEnabled persists the GeoIP toggle.
+func (db *DB) SetGeoIPEnabled(enabled bool) error {
+	return db.SetSetting(settingGeoIPEnabled, boolStr(enabled))
+}
+
+// WebhookSettings is the persisted webhook + GPS-alert configuration.
+type WebhookSettings struct {
+	Type      string
+	URL       string
+	Topic     string
+	Token     string // gotify application token
+	Priority  string
+	OnHit     bool
+	AuthToken string // ntfy access token (Authorization: Bearer), takes precedence over AuthUser/AuthPass
+	AuthUser  string // ntfy username, for servers requiring Basic auth
+	AuthPass  string // ntfy password
+	GPSAlertEnabled  bool
+	GPSAlertPriority string
+}
+
+// GetWebhookSettings loads the current webhook/GPS-alert configuration,
+// applying sane defaults for anything never explicitly set.
+func (db *DB) GetWebhookSettings() (WebhookSettings, error) {
+	var ws WebhookSettings
+	var err error
+	get := func(key, def string) string {
+		if err != nil {
+			return def
+		}
+		var v string
+		var ok bool
+		v, ok, err = db.GetSetting(key)
+		if !ok {
+			return def
+		}
+		return v
+	}
+	ws.Type = get(settingWebhookType, "none")
+	ws.URL = get(settingWebhookURL, "")
+	ws.Topic = get(settingWebhookTopic, "")
+	ws.Token = get(settingWebhookToken, "")
+	ws.Priority = get(settingWebhookPriority, "default")
+	ws.OnHit = get(settingWebhookOnHit, "1") == "1"
+	ws.AuthToken = get(settingWebhookAuthToken, "")
+	ws.AuthUser = get(settingWebhookAuthUser, "")
+	ws.AuthPass = get(settingWebhookAuthPass, "")
+	ws.GPSAlertEnabled = get(settingGPSAlertEnabled, "1") == "1"
+	ws.GPSAlertPriority = get(settingGPSAlertPriority, "urgent")
+	return ws, err
+}
+
+// SetWebhookSettings persists the webhook configuration (type/url/topic/token/priority/on-hit/auth).
+func (db *DB) SetWebhookSettings(ws WebhookSettings) error {
+	pairs := map[string]string{
+		settingWebhookType:      ws.Type,
+		settingWebhookURL:       ws.URL,
+		settingWebhookTopic:     ws.Topic,
+		settingWebhookToken:     ws.Token,
+		settingWebhookPriority:  ws.Priority,
+		settingWebhookOnHit:     boolStr(ws.OnHit),
+		settingWebhookAuthToken: ws.AuthToken,
+		settingWebhookAuthUser:  ws.AuthUser,
+		settingWebhookAuthPass:  ws.AuthPass,
+	}
+	for k, v := range pairs {
+		if err := db.SetSetting(k, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SetGPSAlertSettings persists the separate GPS-capture high-priority alert configuration.
+func (db *DB) SetGPSAlertSettings(enabled bool, priority string) error {
+	if err := db.SetSetting(settingGPSAlertEnabled, boolStr(enabled)); err != nil {
+		return err
+	}
+	return db.SetSetting(settingGPSAlertPriority, priority)
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
+}
+
 // GetSetting returns a raw setting value, or ok=false if it has never been set.
 func (db *DB) GetSetting(key string) (value string, ok bool, err error) {
 	err = db.QueryRow(`SELECT value FROM settings WHERE key = ?`, key).Scan(&value)
@@ -240,6 +358,40 @@ func (db *DB) SetLinkActive(id int64, active bool) error {
 	return err
 }
 
+// UpdateLinkConfig overwrites a link's config JSON blob (used to persist
+// ExpiredNotified once a one-time expiry webhook has fired).
+func (db *DB) UpdateLinkConfig(id int64, cfg models.LinkConfig) error {
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`UPDATE links SET config = ? WHERE id = ?`, string(b), id)
+	return err
+}
+
+// CountEvents returns the total number of events logged against a link —
+// used to enforce a max-clicks expiry.
+func (db *DB) CountEvents(linkID int64) (int, error) {
+	var n int
+	err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE link_id = ?`, linkID).Scan(&n)
+	return n, err
+}
+
+// FirstEventAt returns the timestamp of a link's earliest event, for the
+// time-to-first-click metric. ok is false if the link has no events yet.
+func (db *DB) FirstEventAt(linkID int64) (t time.Time, ok bool, err error) {
+	var first sql.NullString
+	err = db.QueryRow(`SELECT MIN(ts) FROM events WHERE link_id = ?`, linkID).Scan(&first)
+	if err != nil || !first.Valid {
+		return time.Time{}, false, err
+	}
+	t, err = parseSQLiteTime(first.String)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return t, true, nil
+}
+
 // DeleteLink removes a link and (via cascade) its events.
 func (db *DB) DeleteLink(id int64) error {
 	_, err := db.Exec(`DELETE FROM links WHERE id = ?`, id)
@@ -271,6 +423,25 @@ func (db *DB) AttachGPS(id int64, lat, lon, accuracy float64, headersJSON string
 	return err
 }
 
+// AttachFingerprint merges JS-side fingerprint signals (from the clone
+// live-proxy's beacon) into an existing event's headers_json blob, under a
+// "js_fingerprint" key, preserving whatever was already recorded there.
+func (db *DB) AttachFingerprint(id int64, fp map[string]string) error {
+	var hdr string
+	if err := db.QueryRow(`SELECT headers_json FROM events WHERE id = ?`, id).Scan(&hdr); err != nil {
+		return err
+	}
+	m := map[string]any{}
+	_ = json.Unmarshal([]byte(hdr), &m) // best-effort; start fresh on malformed data
+	m["js_fingerprint"] = fp
+	b, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`UPDATE events SET headers_json = ? WHERE id = ?`, string(b), id)
+	return err
+}
+
 // ListEvents returns events, optionally filtered by link, newest first, capped by limit.
 func (db *DB) ListEvents(linkID int64, limit int) ([]*models.Event, error) {
 	q := `
@@ -290,6 +461,71 @@ func (db *DB) ListEvents(linkID int64, limit int) ([]*models.Event, error) {
 		args = append(args, limit)
 	}
 	rows, err := db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*models.Event
+	for rows.Next() {
+		e := &models.Event{}
+		var gpsLat, gpsLon, gpsAcc sql.NullFloat64
+		if err := rows.Scan(&e.ID, &e.LinkID, &e.Type, &e.Timestamp, &e.IP, &e.Country, &e.Region,
+			&e.City, &e.Lat, &e.Lon, &e.ISP, &e.Org, &e.ASN, &e.UserAgent, &e.Device, &e.OS,
+			&e.Browser, &e.Referer, &e.AcceptLanguage, &e.HeadersJSON,
+			&gpsLat, &gpsLon, &gpsAcc, &e.LinkSlug, &e.LinkLabel); err != nil {
+			return nil, err
+		}
+		if gpsLat.Valid {
+			e.GPSLat = &gpsLat.Float64
+		}
+		if gpsLon.Valid {
+			e.GPSLon = &gpsLon.Float64
+		}
+		if gpsAcc.Valid {
+			e.GPSAccuracy = &gpsAcc.Float64
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// ListEventsFiltered returns a search-filtered, paginated slice of events,
+// newest first. linkID scopes to one link when > 0; q performs a
+// case-insensitive substring match across IP/geo/device fields when
+// non-empty; typ filters by exact event type when non-empty. It returns one
+// extra row beyond limit (trimmed by the caller) so callers can tell whether
+// more pages remain without a separate COUNT query.
+func (db *DB) ListEventsFiltered(linkID int64, q, typ string, offset, limit int) ([]*models.Event, error) {
+	query := `
+		SELECT e.id, e.link_id, e.type, e.ts, e.ip, e.country, e.region, e.city, e.lat, e.lon,
+		       e.isp, e.org, e.asn, e.user_agent, e.device, e.os, e.browser, e.referer,
+		       e.accept_language, e.headers_json, e.gps_lat, e.gps_lon, e.gps_accuracy,
+		       l.slug, l.label
+		FROM events e JOIN links l ON l.id = e.link_id
+		WHERE 1=1`
+	args := []any{}
+	if linkID > 0 {
+		query += ` AND e.link_id = ?`
+		args = append(args, linkID)
+	}
+	if typ != "" {
+		query += ` AND e.type = ?`
+		args = append(args, typ)
+	}
+	if q != "" {
+		like := "%" + q + "%"
+		query += ` AND (e.ip LIKE ? OR e.country LIKE ? OR e.region LIKE ? OR e.city LIKE ?
+			OR e.isp LIKE ? OR e.org LIKE ? OR e.device LIKE ? OR e.os LIKE ? OR e.browser LIKE ?
+			OR l.label LIKE ? OR l.slug LIKE ?)`
+		for i := 0; i < 11; i++ {
+			args = append(args, like)
+		}
+	}
+	query += ` ORDER BY e.ts DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

@@ -39,11 +39,12 @@
     const THEME = {{.Theme}};
 
     if (THEME === "cats") {
-      // A handful of royalty-free placeholder cat images (via placekitten-style service).
+      // Bundled, locally-served illustrations — no third-party image host
+      // involved (the previous placekitten.com integration went dark).
       const grid = document.getElementById("grid");
       for (let i = 1; i <= 6; i++) {
         const img = document.createElement("img");
-        img.src = "https://placekitten.com/400/400?image=" + i;
+        img.src = "/static/decoy/cat" + i + ".svg";
         img.loading = "lazy";
         img.alt = "cat";
         grid.appendChild(img);

@@ -36,7 +36,7 @@
           <input type="text" name="slug" pattern="[A-Za-z0-9_-]+" placeholder="e.g. invoice-2024">
         </label>
 
-        <div class="field-group" data-show-for="redirect clone">
+        <div class="field-group" data-show-for="redirect">
           <label>Destination URL
             <input type="url" name="destination" placeholder="https://example.com/real-page">
           </label>
@@ -55,20 +55,29 @@
               <option value="loading">Generic "loading" page</option>
             </select>
           </label>
-          <label>Redirect after capture <span class="muted">(optional URL)</span>
+          <label>Clone page URL <span class="muted">(optional — live-proxy this real page instead of the theme above)</span>
+            <input type="url" name="clone_url" placeholder="https://example.com/some-real-page">
+          </label>
+          <label>Redirect after capture <span class="muted">(optional URL, ignored when a clone URL is set)</span>
             <input type="url" name="destination" placeholder="https://example.com/thanks">
           </label>
         </div>
 
         <div class="field-group" data-show-for="clone">
-          <label>Preview title
-            <input type="text" name="title" placeholder="Shared Document">
+          <label>Destination URL to clone <span class="muted">(live-proxied — served as-is, not redirected)</span>
+            <input type="url" name="destination" placeholder="https://example.com/real-page">
           </label>
-          <label>Preview description
-            <input type="text" name="description" placeholder="Click to view the shared file">
+        </div>
+
+        <div class="field-group" data-show-for="redirect pixel gps clone">
+          <label>Expires at <span class="muted">(optional)</span>
+            <input type="datetime-local" name="expires_at">
           </label>
-          <label>Preview image URL <span class="muted">(optional)</span>
-            <input type="url" name="og_image" placeholder="https://example.com/thumb.png">
+          <label>Max clicks <span class="muted">(optional — link stops working after N hits)</span>
+            <input type="number" name="max_clicks" min="1" placeholder="e.g. 50">
+          </label>
+          <label>Notification channel override <span class="muted">(optional — ntfy topic / gotify token for just this link)</span>
+            <input type="text" name="channel" placeholder="leave blank to use the global channel">
           </label>
         </div>
 
@@ -85,21 +94,29 @@
         <table>
           <thead>
             <tr>
-              <th>Label</th><th>Type</th><th>URL</th><th>Events</th><th>Last activity</th>
+              <th>Label</th><th>Type</th><th>URL</th><th></th><th>Events</th><th>Last activity</th>
               <th>Status</th><th>Created</th><th></th>
             </tr>
           </thead>
           <tbody>
             {{range .Links}}
             <tr>
-              <td><a href="/admin/links/{{.ID}}">{{if .Label}}{{.Label}}{{else}}<span class="muted">(untitled)</span>{{end}}</a></td>
+              <td><a href="/admin/links/{{.ID}}">{{linkName .}}</a></td>
               <td><span class="badge">{{typeBadge .Type}}</span></td>
               <td class="mono url-cell">
                 <input type="text" readonly value="{{shareURL $.BaseURL .}}" onclick="this.select()">
               </td>
+              <td>
+                <button type="button" class="btn btn-ghost btn-sm qr-btn" title="Show QR code"
+                        data-qr-url="/admin/links/{{.ID}}/qr.png" data-qr-name="{{linkName .}}">▦</button>
+              </td>
               <td>{{.EventCount}}</td>
               <td>{{if .LastEvent}}{{since .LastEvent}}{{else}}<span class="muted">never</span>{{end}}</td>
-              <td>{{if .Active}}<span class="pill pill-on">Active</span>{{else}}<span class="pill pill-off">Disabled</span>{{end}}</td>
+              <td>
+                {{if .Expired}}<span class="pill pill-off">Expired</span>
+                {{else if .Active}}<span class="pill pill-on">Active</span>
+                {{else}}<span class="pill pill-off">Disabled</span>{{end}}
+              </td>
               <td>{{fmtDate .CreatedAt}}</td>
               <td class="row-actions">
                 <form method="post" action="/admin/links/{{.ID}}/toggle">
@@ -119,6 +136,15 @@
       {{end}}
     </section>
   </main>
+
+  <div id="qrModal" class="qr-modal" hidden>
+    <div class="qr-modal-card">
+      <button type="button" class="qr-modal-close" aria-label="Close">&times;</button>
+      <h3 id="qrModalTitle">QR code</h3>
+      <img id="qrModalImg" src="" alt="QR code" width="256" height="256">
+    </div>
+  </div>
+
   <script src="/static/links.js"></script>
 </body>
 </html>

@@ -10,8 +10,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/skip2/go-qrcode"
 
 	"github.com/spignelon/ipgrab/internal/auth"
 	"github.com/spignelon/ipgrab/internal/db"
@@ -124,10 +127,87 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 
 // SettingsPage handles GET /admin/settings.
 func (h *Handler) SettingsPage(w http.ResponseWriter, r *http.Request) {
+	webhook, err := h.DB.GetWebhookSettings()
+	if err != nil {
+		internalError(w, "settings: load webhook settings", err)
+		return
+	}
 	h.render(w, "settings.html", map[string]any{
-		"Nav":  "settings",
-		"CSRF": auth.CSRFToken(r),
+		"Nav":          "settings",
+		"CSRF":         auth.CSRFToken(r),
+		"Webhook":      webhook,
+		"GeoIPEnabled": h.GeoIPEnabled(),
+		"Notice":       r.URL.Query().Get("notice"),
+		"Error":        r.URL.Query().Get("err"),
 	})
+}
+
+// SaveWebhook handles POST /admin/settings/webhook: persists the webhook
+// backend (ntfy/gotify) configuration and the GPS-capture alert settings.
+func (h *Handler) SaveWebhook(w http.ResponseWriter, r *http.Request) {
+	if !auth.VerifyCSRF(r) {
+		http.Error(w, "invalid csrf token", http.StatusForbidden)
+		return
+	}
+	ws := db.WebhookSettings{
+		Type:             r.FormValue("webhook_type"),
+		URL:              strings.TrimRight(strings.TrimSpace(r.FormValue("webhook_url")), "/"),
+		Topic:            strings.TrimSpace(r.FormValue("webhook_topic")),
+		Token:            strings.TrimSpace(r.FormValue("webhook_token")),
+		Priority:         r.FormValue("webhook_priority"),
+		OnHit:            r.FormValue("webhook_on_hit") == "1",
+		AuthToken:        strings.TrimSpace(r.FormValue("webhook_auth_token")),
+		AuthUser:         strings.TrimSpace(r.FormValue("webhook_auth_user")),
+		AuthPass:         r.FormValue("webhook_auth_pass"),
+		GPSAlertEnabled:  r.FormValue("gps_alert_enabled") == "1",
+		GPSAlertPriority: r.FormValue("gps_alert_priority"),
+	}
+	switch ws.Type {
+	case "none", "ntfy", "gotify":
+	default:
+		ws.Type = "none"
+	}
+	if err := h.DB.SetWebhookSettings(ws); err != nil {
+		internalError(w, "settings: save webhook", err)
+		return
+	}
+	if err := h.DB.SetGPSAlertSettings(ws.GPSAlertEnabled, ws.GPSAlertPriority); err != nil {
+		internalError(w, "settings: save gps alert", err)
+		return
+	}
+	h.reloadNotifyConfig()
+	http.Redirect(w, r, "/admin/settings?notice=Webhook+settings+saved", http.StatusSeeOther)
+}
+
+// TestWebhook handles POST /admin/settings/webhook/test: sends one test
+// notification using the currently *saved* settings (save first, then test).
+func (h *Handler) TestWebhook(w http.ResponseWriter, r *http.Request) {
+	if !auth.VerifyCSRF(r) {
+		http.Error(w, "invalid csrf token", http.StatusForbidden)
+		return
+	}
+	if err := h.NotifyConfig().Test(); err != nil {
+		http.Redirect(w, r, "/admin/settings?err="+urlEsc(err.Error()), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/settings?notice=Test+notification+sent", http.StatusSeeOther)
+}
+
+// ToggleGeoIP handles POST /admin/settings/geoip: flips the IP-geolocation
+// (ip-api.com) enrichment toggle. Disabling it stops all outbound lookups —
+// events are still logged, just without country/city/ISP/ASN fields.
+func (h *Handler) ToggleGeoIP(w http.ResponseWriter, r *http.Request) {
+	if !auth.VerifyCSRF(r) {
+		http.Error(w, "invalid csrf token", http.StatusForbidden)
+		return
+	}
+	newState := !h.GeoIPEnabled()
+	if err := h.DB.SetGeoIPEnabled(newState); err != nil {
+		internalError(w, "settings: set geoip enabled", err)
+		return
+	}
+	h.SetGeoIPEnabled(newState)
+	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
 }
 
 // ToggleConceal handles POST /admin/settings/conceal: flips conceal mode,
@@ -182,6 +262,9 @@ func (h *Handler) LinksList(w http.ResponseWriter, r *http.Request) {
 		internalError(w, "links list: query", err)
 		return
 	}
+	for _, l := range links {
+		l.Expired = h.linkExpired(l)
+	}
 	h.render(w, "links.html", map[string]any{
 		"Nav":     "links",
 		"CSRF":    auth.CSRFToken(r),
@@ -228,6 +311,27 @@ func (h *Handler) CreateLink(w http.ResponseWriter, r *http.Request) {
 		Title:       r.FormValue("title"),
 		Description: r.FormValue("description"),
 		Image:       strings.TrimSpace(r.FormValue("og_image")),
+		CloneURL:    strings.TrimSpace(r.FormValue("clone_url")),
+		Channel:     strings.TrimSpace(r.FormValue("channel")),
+	}
+
+	// Expiry: an optional datetime-local value (browser-local, no timezone)
+	// and/or an optional max-click count.
+	if raw := strings.TrimSpace(r.FormValue("expires_at")); raw != "" {
+		if t, err := time.Parse("2006-01-02T15:04", raw); err == nil {
+			cfg.ExpiresAt = t.Format(time.RFC3339)
+		} else {
+			http.Redirect(w, r, "/admin/links?err=Invalid+expiry+date", http.StatusSeeOther)
+			return
+		}
+	}
+	if raw := strings.TrimSpace(r.FormValue("max_clicks")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			cfg.MaxClicks = n
+		} else {
+			http.Redirect(w, r, "/admin/links?err=Invalid+max+clicks", http.StatusSeeOther)
+			return
+		}
 	}
 
 	// Handle a custom pixel image upload.
@@ -303,6 +407,13 @@ func (h *Handler) LinkDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	stats, _ := h.DB.GetStats(id)
+	link.Expired = h.linkExpired(link)
+
+	// Time-to-first-click: how long after creation the first event landed.
+	var timeToFirst string
+	if first, ok, err := h.DB.FirstEventAt(id); err == nil && ok {
+		timeToFirst = first.Sub(link.CreatedAt).Round(time.Second).String()
+	}
 
 	// Build map points for the Leaflet map.
 	type pt struct {
@@ -325,15 +436,39 @@ func (h *Handler) LinkDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, "link_detail.html", map[string]any{
-		"Nav":      "links",
-		"CSRF":     auth.CSRFToken(r),
-		"Link":     link,
-		"Events":   events,
-		"Stats":    stats,
-		"BaseURL":  h.Cfg.BaseURL,
-		"ShareURL": h.shareURL(link),
-		"Points":   pts,
+		"Nav":         "links",
+		"CSRF":        auth.CSRFToken(r),
+		"Link":        link,
+		"Events":      events,
+		"Stats":       stats,
+		"BaseURL":     h.Cfg.BaseURL,
+		"ShareURL":    h.shareURL(link),
+		"Points":      pts,
+		"TimeToFirst": timeToFirst,
 	})
+}
+
+// LinkQR handles GET /admin/links/{id}/qr.png: renders a QR code encoding
+// the link's public share URL.
+func (h *Handler) LinkQR(w http.ResponseWriter, r *http.Request) {
+	id := atoi64(r.PathValue("id"))
+	link, err := h.DB.GetLink(id)
+	if errors.Is(err, db.ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		internalError(w, "link qr: get link", err)
+		return
+	}
+	png, err := qrcode.Encode(h.shareURL(link), qrcode.Medium, 256)
+	if err != nil {
+		internalError(w, "link qr: encode", err)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(png)
 }
 
 // ToggleLink handles POST /admin/links/{id}/toggle.
@@ -365,6 +500,50 @@ func (h *Handler) DeleteLink(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = h.DB.DeleteLink(id)
 	http.Redirect(w, r, "/admin/links", http.StatusSeeOther)
+}
+
+// ---- Events (global log page + search/pagination API) ----
+
+// EventsPage handles GET /admin/events: a global event log across every
+// link, with client-side search/filter and infinite scroll (see events.js).
+func (h *Handler) EventsPage(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "events.html", map[string]any{
+		"Nav": "events",
+	})
+}
+
+// eventsPageSize is how many rows the infinite-scroll API returns per page.
+const eventsPageSize = 50
+
+// EventsAPI handles GET /admin/api/events: paginated, search/type-filtered
+// event rows as JSON, used by both the global Events page and the per-link
+// detail page's event log (scoped via ?link=id).
+func (h *Handler) EventsAPI(w http.ResponseWriter, r *http.Request) {
+	linkID := atoi64(r.URL.Query().Get("link"))
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	typ := strings.TrimSpace(r.URL.Query().Get("type"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Fetch one extra row to know whether another page remains, without a
+	// separate COUNT query.
+	events, err := h.DB.ListEventsFiltered(linkID, q, typ, offset, eventsPageSize+1)
+	if err != nil {
+		internalError(w, "events api: query", err)
+		return
+	}
+	hasMore := len(events) > eventsPageSize
+	if hasMore {
+		events = events[:eventsPageSize]
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"events":   events,
+		"has_more": hasMore,
+	})
 }
 
 // ---- Stats API + CSV ----

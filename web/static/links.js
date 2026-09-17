@@ -17,3 +17,33 @@
   select.addEventListener("change", update);
   update();
 })();
+
+// QR code popup: click the QR icon beside a link to show a scannable code
+// for its share URL.
+(function () {
+  const modal = document.getElementById("qrModal");
+  if (!modal) return;
+  const img = document.getElementById("qrModalImg");
+  const title = document.getElementById("qrModalTitle");
+  const closeBtn = modal.querySelector(".qr-modal-close");
+
+  document.querySelectorAll(".qr-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      img.src = btn.dataset.qrUrl;
+      title.textContent = "QR code — " + btn.dataset.qrName;
+      modal.hidden = false;
+    });
+  });
+
+  function close() {
+    modal.hidden = true;
+    img.src = "";
+  }
+  closeBtn.addEventListener("click", close);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) close();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.hidden) close();
+  });
+})();

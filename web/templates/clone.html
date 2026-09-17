@@ -27,14 +27,22 @@
     a.btn { display: inline-block; background: #2563eb; color: #fff; text-decoration: none;
             padding: 10px 22px; border-radius: 8px; font-weight: 600; }
     a.btn:hover { background: #1d4ed8; }
+    .error { color: #b91c1c; background: #fee2e2; border-radius: 8px; padding: 8px 12px; font-size: 13px; margin: 0 0 16px; }
   </style>
 </head>
 <body>
+  <!--
+    This card is only a fallback: the live-proxy in ClonePage (public.go)
+    normally serves the real destination page directly, not this card. It's
+    shown when no destination is configured yet, or when the live fetch
+    failed (origin down, refused, etc).
+  -->
   <div class="card">
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
     {{if .Image}}<img src="{{.Image}}" alt="">{{end}}
     <h1>{{.Title}}</h1>
     {{if .Description}}<p>{{.Description}}</p>{{end}}
-    <a class="btn" href="/p/{{.Slug}}?go=1">Continue</a>
+    {{if .Destination}}<a class="btn" href="{{.Destination}}">Continue to site</a>{{end}}
   </div>
 </body>
 </html>

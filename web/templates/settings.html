@@ -12,6 +12,105 @@
       <h1>Settings</h1>
     </div>
 
+    {{if .Notice}}<p class="notice">{{.Notice}}</p>{{end}}
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+
+    <section class="card">
+      <h3>GeoIP lookups</h3>
+      <p class="muted">
+        Enriches every captured event with country/region/city and ISP/org/ASN by looking up the
+        visitor's IP against <a href="https://ip-api.com" target="_blank" rel="noreferrer noopener">ip-api.com</a>.
+        Disabling this stops all outbound lookups — events are still logged with IP, device, and
+        timestamp, just without geo/ISP fields.
+      </p>
+      {{if .GeoIPEnabled}}
+        <p><span class="pill pill-on">GeoIP is ON</span></p>
+      {{else}}
+        <p><span class="pill pill-off">GeoIP is OFF</span></p>
+      {{end}}
+      <form method="post" action="/admin/settings/geoip">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <button type="submit" class="btn {{if .GeoIPEnabled}}btn-ghost{{else}}btn-primary{{end}}">
+          {{if .GeoIPEnabled}}Disable GeoIP lookups{{else}}Enable GeoIP lookups{{end}}
+        </button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h3>Webhook notifications</h3>
+      <p class="muted">
+        Send a notification to a self-hosted <a href="https://ntfy.sh" target="_blank" rel="noreferrer noopener">ntfy</a>
+        or <a href="https://gotify.net" target="_blank" rel="noreferrer noopener">Gotify</a> server whenever a link
+        is hit, or when a link expires. Every link can use this global channel, or override it with its own
+        ntfy topic / Gotify token in that link's create form.
+      </p>
+      <form method="post" action="/admin/settings/webhook" class="settings-form">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+
+        <label>Backend
+          <select name="webhook_type">
+            <option value="none" {{if eq .Webhook.Type "none"}}selected{{end}}>Disabled</option>
+            <option value="ntfy" {{if eq .Webhook.Type "ntfy"}}selected{{end}}>ntfy</option>
+            <option value="gotify" {{if eq .Webhook.Type "gotify"}}selected{{end}}>Gotify</option>
+          </select>
+        </label>
+        <label>Server URL
+          <input type="url" name="webhook_url" value="{{.Webhook.URL}}" placeholder="https://ntfy.sh or https://gotify.example.com">
+        </label>
+        <label>ntfy topic <span class="muted">(used when backend = ntfy)</span>
+          <input type="text" name="webhook_topic" value="{{.Webhook.Topic}}" placeholder="my-ipgrab-alerts">
+        </label>
+        <label>ntfy access token <span class="muted">(optional — for a topic/server requiring auth; takes priority over username/password below)</span>
+          <input type="text" name="webhook_auth_token" value="{{.Webhook.AuthToken}}" placeholder="tk_...">
+        </label>
+        <label>ntfy username <span class="muted">(optional — alternative to an access token, HTTP Basic auth)</span>
+          <input type="text" name="webhook_auth_user" value="{{.Webhook.AuthUser}}" autocomplete="off">
+        </label>
+        <label>ntfy password <span class="muted">(optional)</span>
+          <input type="password" name="webhook_auth_pass" value="{{.Webhook.AuthPass}}" autocomplete="off">
+        </label>
+        <label>Gotify application token <span class="muted">(used when backend = Gotify; sent as its own auth)</span>
+          <input type="text" name="webhook_token" value="{{.Webhook.Token}}" placeholder="AbCdEf123...">
+        </label>
+        <label>Priority for link-hit notifications
+          <select name="webhook_priority">
+            <option value="min" {{if eq .Webhook.Priority "min"}}selected{{end}}>Min</option>
+            <option value="low" {{if eq .Webhook.Priority "low"}}selected{{end}}>Low</option>
+            <option value="default" {{if eq .Webhook.Priority "default"}}selected{{end}}>Default</option>
+            <option value="high" {{if eq .Webhook.Priority "high"}}selected{{end}}>High</option>
+            <option value="urgent" {{if eq .Webhook.Priority "urgent"}}selected{{end}}>Urgent</option>
+          </select>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" name="webhook_on_hit" value="1" {{if .Webhook.OnHit}}checked{{end}}>
+          Notify on every link hit (click / view / pixel open)
+        </label>
+
+        <h4>GPS-capture alert</h4>
+        <p class="muted small">
+          A real GPS fix is high-value — this fires a separate, higher-priority notification on top
+          of the normal hit notification above, using the same backend/server.
+        </p>
+        <label class="checkbox-label">
+          <input type="checkbox" name="gps_alert_enabled" value="1" {{if .Webhook.GPSAlertEnabled}}checked{{end}}>
+          Send a dedicated alert when precise GPS is captured
+        </label>
+        <label>GPS alert priority
+          <select name="gps_alert_priority">
+            <option value="default" {{if eq .Webhook.GPSAlertPriority "default"}}selected{{end}}>Default</option>
+            <option value="high" {{if eq .Webhook.GPSAlertPriority "high"}}selected{{end}}>High</option>
+            <option value="urgent" {{if eq .Webhook.GPSAlertPriority "urgent"}}selected{{end}}>Urgent</option>
+          </select>
+        </label>
+
+        <button type="submit" class="btn btn-primary">Save webhook settings</button>
+      </form>
+      <form method="post" action="/admin/settings/webhook/test" style="margin-top:10px;">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <button type="submit" class="btn btn-ghost">Send test notification</button>
+      </form>
+    </section>
+
     <section class="card">
       <h3>Conceal mode</h3>
       <p class="muted">

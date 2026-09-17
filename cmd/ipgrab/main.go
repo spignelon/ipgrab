@@ -49,8 +49,11 @@ func main() {
 	mux.HandleFunc("GET /s/{slug}", h.Redirect)
 	mux.HandleFunc("GET /i/{slug}", h.Pixel)
 	mux.HandleFunc("GET /g/{slug}", h.GPSPage)
+	mux.HandleFunc("GET /g/{slug}/r", h.GPSResource)
 	mux.HandleFunc("POST /g/{slug}/loc", h.GPSCollect)
 	mux.HandleFunc("GET /p/{slug}", h.ClonePage)
+	mux.HandleFunc("GET /p/{slug}/r", h.ClonePageResource)
+	mux.HandleFunc("POST /p/{slug}/fp", h.ClonePageFingerprint)
 	mux.HandleFunc("GET /favicon.ico", h.Favicon)
 	// Conceal-mode assets, served at paths that mirror Nextcloud's real ones.
 	mux.HandleFunc("GET /core/img/logo/logo.svg", h.ConcealLogo)
@@ -67,12 +70,18 @@ func main() {
 	mux.HandleFunc("GET /admin/links", am.RequireAuth(h.LinksList))
 	mux.HandleFunc("POST /admin/links", am.RequireAuth(h.CreateLink))
 	mux.HandleFunc("GET /admin/links/{id}", am.RequireAuth(h.LinkDetail))
+	mux.HandleFunc("GET /admin/links/{id}/qr.png", am.RequireAuth(h.LinkQR))
 	mux.HandleFunc("POST /admin/links/{id}/toggle", am.RequireAuth(h.ToggleLink))
 	mux.HandleFunc("POST /admin/links/{id}/delete", am.RequireAuth(h.DeleteLink))
+	mux.HandleFunc("GET /admin/events", am.RequireAuth(h.EventsPage))
+	mux.HandleFunc("GET /admin/api/events", am.RequireAuth(h.EventsAPI))
 	mux.HandleFunc("GET /admin/api/stats", am.RequireAuth(h.StatsAPI))
 	mux.HandleFunc("GET /admin/events.csv", am.RequireAuth(h.EventsCSV))
 	mux.HandleFunc("GET /admin/settings", am.RequireAuth(h.SettingsPage))
 	mux.HandleFunc("POST /admin/settings/conceal", am.RequireAuth(h.ToggleConceal))
+	mux.HandleFunc("POST /admin/settings/webhook", am.RequireAuth(h.SaveWebhook))
+	mux.HandleFunc("POST /admin/settings/webhook/test", am.RequireAuth(h.TestWebhook))
+	mux.HandleFunc("POST /admin/settings/geoip", am.RequireAuth(h.ToggleGeoIP))
 
 	// Root: send to dashboard (or setup/login as appropriate).
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {

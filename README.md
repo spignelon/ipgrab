@@ -39,13 +39,37 @@ IPGrab lets you generate four kinds of "capture" links from one dashboard:
 |---|---|---|
 | **Redirect / shortener** | `/s/{slug}` | A normal-looking short link. Logs the visitor, then 302-redirects to a real URL you choose. |
 | **Tracking pixel** | `/i/{slug}.png` | A 1×1 transparent image (or your own uploaded image) to embed in an HTML email or document. Logs when it's loaded. |
-| **GPS decoy page** | `/g/{slug}` | A themed landing page (e.g. "cute cat pictures") that requests the visitor's browser geolocation. If they accept, precise GPS coordinates are logged. |
-| **Cloned / preview link** | `/p/{slug}` | Renders Open Graph tags so the link unfurls with a rich preview (title/description/image) in chat apps, then logs a click-through when the visitor continues. |
+| **GPS decoy page** | `/g/{slug}` | A themed landing page (e.g. "cute cat pictures") that requests the visitor's browser geolocation, or an optional live-proxied real page (see below). If they accept, precise GPS coordinates are logged. |
+| **Cloned / preview link** | `/p/{slug}` | **Live-proxies** a real destination page — served directly (not a redirect, not a "click to continue" card) with its own title/description/OG tags intact, so the link unfurls identically to the original in chat apps and opening it shows the real page. |
 
 Every visit captures (where available): IP address, geolocated country/region/city and
-ISP/org/ASN (via ip-api.com), User-Agent-derived device/OS/browser, referer, Accept-Language,
-and a handful of JS-side signals (timezone, screen size, platform). GPS events additionally
-store precise latitude/longitude/accuracy from the browser's Geolocation API.
+ISP/org/ASN (via ip-api.com, toggleable — see Settings), User-Agent-derived device/OS/browser,
+referer, Accept-Language, and a handful of JS-side signals (timezone, screen size, platform).
+GPS events additionally store precise latitude/longitude/accuracy from the browser's
+Geolocation API.
+
+## More features
+
+- **Link expiration** — set an expiry date/time and/or a max-click count per link. Once
+  reached, the link 404s for visitors (same as a disabled link) and, if a webhook is
+  configured, fires a one-time "link expired" notification.
+- **Time-to-first-hit metric** — each link's detail page shows how long after creation its
+  first event landed.
+- **QR codes** — every link row has a QR icon; click it for a popup with a scannable code
+  encoding that link's share URL (`GET /admin/links/{id}/qr.png`).
+- **Event search + infinite scroll** — both the per-link event log and a new global
+  **Events** page (`/admin/events`) support searching by IP/location/ISP/device and filtering
+  by event type, loading more results as you scroll.
+- **Webhook notifications (ntfy / Gotify)** — configure a self-hosted
+  [ntfy](https://ntfy.sh) or [Gotify](https://gotify.net) server in Settings to get notified
+  on link hits and expiry. Each link can override the global topic/token with its own, so
+  different engagements can route to different channels. GPS captures get their own
+  separate, higher-priority alert. Both backends support authentication (ntfy: access token
+  or username/password; Gotify: its own application token).
+- **Serial numbers for untitled links** — a link with no label shows `#<id>` everywhere
+  instead of a blank "(untitled)".
+- **GeoIP toggle** — the ip-api.com lookup can be turned off entirely from Settings (enabled
+  by default); events are still logged with IP/device/timestamp, just without geo/ISP fields.
 
 ## Dashboard features
 
@@ -62,6 +86,31 @@ store precise latitude/longitude/accuracy from the browser's Geolocation API.
   no toggle needed.
 - **Conceal mode** (Admin → Settings) — disguises the login page/title/favicon as a self-hosted
   Nextcloud instance. See [Conceal mode](#conceal-mode-admin--settings) below.
+- **Events** — a global, searchable event log across every link (`/admin/events`), separate
+  from each link's own scoped log.
+
+## Live-proxy clone engine (Clone/Preview links + optional GPS-decoy clone)
+
+Instead of downloading, storing, or "snapshotting" the target page, IPGrab **relays it live**:
+every request re-fetches the real page (and its sub-resources) from the origin on the fly and
+rewrites URLs so the visitor's browser keeps talking to your IPGrab instance, never directly to
+the origin. This is the same idea as `tor.eff.org` mirroring `torproject.org` — nothing is
+cloned to disk, so the mirrored page always reflects the live original and there's no storage
+overhead. No headless browser is used, so heavily client-side-rendered (SPA) pages will only
+render as far as their initial HTML/CSS goes — this is a lightweight HTML/CSS rewriting proxy,
+not a full browser engine.
+
+- **Clone/Preview links** (`/p/{slug}`) use this for the entire page: opening the link shows
+  the real destination directly, and its own `<title>`/`<meta description>`/Open Graph tags
+  flow through untouched, so the link unfurls in WhatsApp/Telegram/etc. exactly like the
+  original URL would.
+- **GPS decoy pages** (`/g/{slug}`) can optionally set a "Clone page URL" instead of the
+  built-in cat-pictures/loading theme — the real page is shown, with the same geolocation
+  capture script injected into it.
+- **SSRF protection:** every fetch (initial page and every resource) resolves the target
+  host and refuses loopback, private (RFC1918), link-local, and unspecified addresses, and
+  anything that isn't plain `http`/`https` — so a clone/decoy target can't be pointed at your
+  own internal network or metadata endpoints. Redirects are capped and re-checked the same way.
 
 ## Known limitations (by design, not bugs)
 
@@ -74,6 +123,10 @@ store precise latitude/longitude/accuracy from the browser's Geolocation API.
   geolocation and device fingerprinting, just not precise GPS coordinates.
 - **ip-api.com** (the free geolocation API this project uses) is HTTP-only and rate-limited to
   ~45 requests/minute. Results are cached in memory for 6 hours per IP to stay under that limit.
+  It can be disabled entirely in Settings if you'd rather not make outbound lookups at all.
+- **The live-proxy clone engine doesn't run JavaScript.** It rewrites and relays HTML/CSS, so a
+  heavily client-side-rendered page may not look complete — this is a deliberate trade-off to
+  avoid running a headless browser (heavier, slower, larger attack surface).
 - Not built and will not be added: fake login/credential-harvesting pages, sender/domain
   spoofing, or anti-spam/AV evasion tooling. This project stays in the "logging link" lane.
 
@@ -135,7 +188,13 @@ needed.
 - **Frontend:** server-rendered `html/template` pages + vanilla JS, Chart.js for graphs and
   Leaflet for the location map, both vendored locally (`web/static/`) — no CDN dependency at
   runtime except OpenStreetMap map tiles on the link-detail page.
-- **GeoIP enrichment:** [ip-api.com](https://ip-api.com) free JSON API, in-memory cached.
+- **GeoIP enrichment:** [ip-api.com](https://ip-api.com) free JSON API, in-memory cached,
+  toggleable in Settings.
+- **Live-proxy clone engine:** `golang.org/x/net/html` for parsing/rewriting — no headless
+  browser (see [above](#live-proxy-clone-engine-clonepreview-links--optional-gps-decoy-clone)).
+- **QR codes:** `github.com/skip2/go-qrcode`, generated server-side, no external service.
+- **Webhooks:** plain `net/http` POSTs to a self-hosted ntfy or Gotify server — no vendored
+  client library.
 - Everything (templates + static assets) is embedded into the binary with `//go:embed`, so
   the Docker image is a single self-contained executable plus its SQLite data volume.
 
