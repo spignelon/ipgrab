@@ -135,7 +135,18 @@ not a full browser engine.
   etc.) will have its challenge relayed faithfully, but the challenge widget itself typically
   refuses to initialize once it detects it isn't being served from the real origin — this is
   the anti-bot vendor's own anti-proxy defense working as designed, not something a rewriting
-  proxy can complete on the visitor's behalf.
+  proxy can complete on the visitor's behalf. A third, more fundamental consequence: any
+  server-rendered-then-hydrated framework (React/Next.js and similar) ships a client bundle
+  built to expect the *exact* attribute values the server sent — rewriting `src`/`href` so
+  resources route back through this server (required to keep the visitor on this origin) makes
+  those attributes differ from what the client bundle has baked in, so React's hydration bails
+  out for that tree. Verified directly: a plain fetch of a Next.js site attaches a
+  `__reactFiber$...` key to its DOM nodes (hydrated); the same site through `/p/{slug}` gets no
+  React key at all (hydration never completes), so mount-triggered effects/animations (Framer
+  Motion, etc.) stay stuck at their initial state even though the static markup, styling, and
+  plain-anchor/CSS behavior all still work. This is structural, not a bug to patch — avoiding it
+  would mean not rewriting those attributes, which defeats the point of keeping the visitor on
+  this origin.
 - Not built and will not be added: fake login/credential-harvesting pages, sender/domain
   spoofing, or anti-spam/AV evasion tooling. This project stays in the "logging link" lane.
 
