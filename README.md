@@ -1,4 +1,4 @@
-# IPGrab
+# Netra
 
 A self-hosted IP address, device, and location intelligence toolkit for **authorized**
 security assessments — OSINT gathering, phishing-simulation exercises, and physical/remote
@@ -17,7 +17,7 @@ conceal mode, known limitations, and deployment guides.**
 
 ## ⚠️ Disclaimer — read before you deploy this
 
-**IPGrab is intended for lawful, authorized use only** — penetration tests, red-team
+**Netra is intended for lawful, authorized use only** — penetration tests, red-team
 engagements, phishing-awareness training, and security audits you are contractually and
 legally authorized to perform, typically with a signed scope-of-work / rules-of-engagement
 document and, where applicable, informed consent from the people being tested.
@@ -35,7 +35,7 @@ apply to you, your organization, and your targets. The authors accept no liabili
 ## Quick start (Docker)
 
 ```bash
-git clone https://github.com/spignelon/ipgrab.git && cd ipgrab
+git clone https://github.com/spignelon/netra.git && cd netra
 cp .env.example .env
 # edit .env — at minimum set BASE_URL and SESSION_SECRET:
 #   openssl rand -hex 32   (paste the output as SESSION_SECRET)
