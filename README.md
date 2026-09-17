@@ -2,153 +2,33 @@
 
 A self-hosted IP address, device, and location intelligence toolkit for **authorized**
 security assessments — OSINT gathering, phishing-simulation exercises, and physical/remote
-audit engagements. Single admin, single Docker container, SQLite storage, no external
+audit engagements. Single admin account, single Docker container, SQLite storage, no external
 accounts required.
 
-> **This is the same category of tool as Grabify, IPLogger, GoPhish, and Canarytokens.**
-> It is built for people who already run these kinds of engagements professionally and need
-> a self-hosted alternative they fully control.
+> Same category as Grabify, IPLogger, GoPhish, and Canarytokens — for people who already run
+> these kinds of engagements professionally and want a self-hosted alternative they control.
+
+📖 **[See the Wiki](../../wiki) for architecture details, the live-proxy clone engine internals,
+conceal mode, known limitations, and deployment guides.**
 
 ---
 
 ## ⚠️ Disclaimer — read before you deploy this
 
 **IPGrab is intended for lawful, authorized use only** — penetration tests, red-team
-engagements, phishing-awareness training, and security audits that you are contractually
-and legally authorized to perform, typically with a signed scope-of-work / rules-of-engagement
-document and, where applicable, the informed consent of the individuals being tested.
+engagements, phishing-awareness training, and security audits you are contractually and
+legally authorized to perform, typically with a signed scope-of-work / rules-of-engagement
+document and, where applicable, informed consent from the people being tested.
 
-Do **not** use this tool to:
-- track, locate, or profile a person without authorization or a lawful basis;
-- send tracking links or pixels to people outside an approved engagement;
-- collect location or device data covered by GDPR, CCPA, or similar laws without a valid
-  legal basis and, where required, consent;
-- harass, stalk, dox, or otherwise cause harm to any individual.
+Do **not** use this tool to track, locate, or profile anyone without authorization; send
+tracking links/pixels outside an approved engagement; collect location or device data covered
+by GDPR/CCPA without a valid legal basis; or harass, stalk, or dox anyone.
 
-You are solely responsible for how you use this software and for complying with the laws and
-regulations that apply to you, your organization, and your targets. The authors accept no
-liability for misuse. **When in doubt, don't send it — get it in writing first.**
+You are solely responsible for how you use this software and for complying with the laws that
+apply to you, your organization, and your targets. The authors accept no liability for misuse.
+**When in doubt, don't send it — get it in writing first.**
 
 ---
-
-## What it does
-
-IPGrab lets you generate four kinds of "capture" links from one dashboard:
-
-| Type | Route | Use case |
-|---|---|---|
-| **Redirect / shortener** | `/s/{slug}` | A normal-looking short link. Logs the visitor, then 302-redirects to a real URL you choose. |
-| **Tracking pixel** | `/i/{slug}.png` | A 1×1 transparent image (or your own uploaded image) to embed in an HTML email or document. Logs when it's loaded. |
-| **GPS decoy page** | `/g/{slug}` | A themed landing page (e.g. "cute cat pictures") that requests the visitor's browser geolocation, or an optional live-proxied real page (see below). If they accept, precise GPS coordinates are logged. |
-| **Cloned / preview link** | `/p/{slug}` | **Live-proxies** a real destination page — served directly (not a redirect, not a "click to continue" card) with its own title/description/OG tags intact, so the link unfurls identically to the original in chat apps and opening it shows the real page. |
-
-Every visit captures (where available): IP address, geolocated country/region/city and
-ISP/org/ASN (via ip-api.com, toggleable — see Settings), User-Agent-derived device/OS/browser,
-referer, Accept-Language, and a handful of JS-side signals (timezone, screen size, platform).
-GPS events additionally store precise latitude/longitude/accuracy from the browser's
-Geolocation API.
-
-## More features
-
-- **Link expiration** — set an expiry date/time and/or a max-click count per link. Once
-  reached, the link 404s for visitors (same as a disabled link) and, if a webhook is
-  configured, fires a one-time "link expired" notification.
-- **Time-to-first-hit metric** — each link's detail page shows how long after creation its
-  first event landed.
-- **QR codes** — every link row has a QR icon; click it for a popup with a scannable code
-  encoding that link's share URL (`GET /admin/links/{id}/qr.png`).
-- **Event search + infinite scroll** — both the per-link event log and a new global
-  **Events** page (`/admin/events`) support searching by IP/location/ISP/device and filtering
-  by event type, loading more results as you scroll.
-- **Webhook notifications (ntfy / Gotify)** — configure a self-hosted
-  [ntfy](https://ntfy.sh) or [Gotify](https://gotify.net) server in Settings to get notified
-  on link hits and expiry. Each link can override the global topic/token with its own, so
-  different engagements can route to different channels. GPS captures get their own
-  separate, higher-priority alert. Both backends support authentication (ntfy: access token
-  or username/password; Gotify: its own application token).
-- **Serial numbers for untitled links** — a link with no label shows `#<id>` everywhere
-  instead of a blank "(untitled)".
-- **GeoIP toggle** — the ip-api.com lookup can be turned off entirely from Settings (enabled
-  by default); events are still logged with IP/device/timestamp, just without geo/ISP fields.
-
-## Dashboard features
-
-- **Overview** — total links, total events, GPS captures, unique IPs, and graphs (events over
-  time, top countries, device types, browsers).
-- **Links** — create/list/toggle/delete every link type from one page; each link shows its
-  share URL, event count, and last-activity time.
-- **Link detail** — full event log for that link, a Leaflet map plotting every geolocated /
-  GPS point, and a CSV export scoped to that link.
-- **CSV export** — full event log, or scoped to one link, from `/admin/events.csv`.
-- Single admin account, created via a first-run `/setup` page; bcrypt-hashed password,
-  signed session cookies, CSRF protection on all state-changing admin actions.
-- Dashboard follows your OS/browser dark-mode setting automatically (`prefers-color-scheme`) —
-  no toggle needed.
-- **Conceal mode** (Admin → Settings) — disguises the login page/title/favicon as a self-hosted
-  Nextcloud instance. See [Conceal mode](#conceal-mode-admin--settings) below.
-- **Events** — a global, searchable event log across every link (`/admin/events`), separate
-  from each link's own scoped log.
-
-## Live-proxy clone engine (Clone/Preview links + optional GPS-decoy clone)
-
-Instead of downloading, storing, or "snapshotting" the target page, IPGrab **relays it live**:
-every request re-fetches the real page (and its sub-resources) from the origin on the fly and
-rewrites URLs so the visitor's browser keeps talking to your IPGrab instance, never directly to
-the origin. This is the same idea as `tor.eff.org` mirroring `torproject.org` — nothing is
-cloned to disk, so the mirrored page always reflects the live original and there's no storage
-overhead. No headless browser is used, so heavily client-side-rendered (SPA) pages will only
-render as far as their initial HTML/CSS goes — this is a lightweight HTML/CSS rewriting proxy,
-not a full browser engine.
-
-- **Clone/Preview links** (`/p/{slug}`) use this for the entire page: opening the link shows
-  the real destination directly, and its own `<title>`/`<meta description>`/Open Graph tags
-  flow through untouched, so the link unfurls in WhatsApp/Telegram/etc. exactly like the
-  original URL would.
-- **GPS decoy pages** (`/g/{slug}`) can optionally set a "Clone page URL" instead of the
-  built-in cat-pictures/loading theme — the real page is shown, with the same geolocation
-  capture script injected into it.
-- **SSRF protection:** every fetch (initial page and every resource) resolves the target
-  host and refuses loopback, private (RFC1918), link-local, and unspecified addresses, and
-  anything that isn't plain `http`/`https` — so a clone/decoy target can't be pointed at your
-  own internal network or metadata endpoints. Redirects are capped and re-checked the same way.
-
-## Known limitations (by design, not bugs)
-
-- **Email tracking pixels are increasingly unreliable.** Gmail proxies remote images through
-  Google's own servers, and Apple Mail Privacy Protection pre-fetches every image regardless
-  of whether the user opens the email — so a pixel often logs the *mail provider's* IP, not
-  the recipient's. Redirect and clone links are far more reliable signal sources.
-- **GPS location requires the visitor to accept the browser permission prompt.** This is a
-  hard browser/OS requirement and cannot be bypassed — if they decline, you still get IP-based
-  geolocation and device fingerprinting, just not precise GPS coordinates.
-- **ip-api.com** (the free geolocation API this project uses) is HTTP-only and rate-limited to
-  ~45 requests/minute. Results are cached in memory for 6 hours per IP to stay under that limit.
-  It can be disabled entirely in Settings if you'd rather not make outbound lookups at all.
-- **The live-proxy clone engine only rewrites HTML/CSS server-side; it doesn't execute
-  JavaScript itself.** The visitor's own browser still runs whatever scripts the origin page
-  ships (this is a deliberate trade-off to avoid running a headless browser server-side —
-  heavier, slower, larger attack surface). Two consequences follow: a heavily client-rendered
-  page (React/SPA-style asset loading, e.g. GitHub) may inject additional scripts at paths the
-  static rewriter never saw, so some secondary assets 404 and dynamic widgets don't work, even
-  though the initial page usually still renders correctly. And a page sitting behind active
-  bot-mitigation (Cloudflare Turnstile, AWS WAF Bot Control, hCaptcha, PerimeterX, DataDome,
-  etc.) will have its challenge relayed faithfully, but the challenge widget itself typically
-  refuses to initialize once it detects it isn't being served from the real origin — this is
-  the anti-bot vendor's own anti-proxy defense working as designed, not something a rewriting
-  proxy can complete on the visitor's behalf. A third, more fundamental consequence: any
-  server-rendered-then-hydrated framework (React/Next.js and similar) ships a client bundle
-  built to expect the *exact* attribute values the server sent — rewriting `src`/`href` so
-  resources route back through this server (required to keep the visitor on this origin) makes
-  those attributes differ from what the client bundle has baked in, so React's hydration bails
-  out for that tree. Verified directly: a plain fetch of a Next.js site attaches a
-  `__reactFiber$...` key to its DOM nodes (hydrated); the same site through `/p/{slug}` gets no
-  React key at all (hydration never completes), so mount-triggered effects/animations (Framer
-  Motion, etc.) stay stuck at their initial state even though the static markup, styling, and
-  plain-anchor/CSS behavior all still work. This is structural, not a bug to patch — avoiding it
-  would mean not rewriting those attributes, which defeats the point of keeping the visitor on
-  this origin.
-- Not built and will not be added: fake login/credential-harvesting pages, sender/domain
-  spoofing, or anti-spam/AV evasion tooling. This project stays in the "logging link" lane.
 
 ## Quick start (Docker)
 
@@ -162,100 +42,56 @@ docker compose up -d --build
 ```
 
 Visit `BASE_URL` (e.g. `http://localhost:8080`) — you'll land on `/setup` to create the one
-admin account. After that, log in at `/login` and you're on the dashboard.
+admin account, then log in at `/login`.
 
-Data (the SQLite database and any uploaded pixel images) persists in the `ipgrab_data` Docker
-named volume, so `docker compose down` / `up` won't lose anything. If you'd rather have the
-database file directly accessible on the host, edit `docker-compose.yml` to bind-mount a local
-folder instead (`./data:/data`) — just make sure that folder is writable by UID 100 (the
-container's non-root `ipgrab` user), e.g. `mkdir -p data && chown 100:101 data`.
+Data persists in the `ipgrab_data` Docker volume across `docker compose down`/`up`. See the
+Wiki's [Quick Start](../../wiki/Quick-Start) page for running without Docker, behind a reverse
+proxy, and the full environment-variable reference.
 
-## Running behind a reverse proxy / on the public internet
+## What it does
 
-- Put a real reverse proxy (nginx, Caddy, Traefik) in front and terminate TLS there.
-- Set `BASE_URL` to your real HTTPS domain so generated links are correct.
-- Set `TRUST_PROXY=true` **only if** that proxy is the sole way to reach the container —
-  otherwise visitors can spoof `X-Forwarded-For` and fake their own IP in your logs.
-- Set `COOKIE_SECURE=true` once you're serving over HTTPS.
+Four kinds of "capture" link, generated from one dashboard:
 
-## Running without Docker
-
-```bash
-go build -o ipgrab ./cmd/ipgrab
-SESSION_SECRET=$(openssl rand -hex 32) BASE_URL=http://localhost:8080 ./ipgrab
-```
-
-Requires Go 1.26+. The sqlite driver is pure Go (`modernc.org/sqlite`), so no cgo/gcc is
-needed.
-
-## Configuration reference
-
-| Variable | Default | Description |
+| Type | Route | Use case |
 |---|---|---|
-| `PORT` | `8080` | TCP port to listen on. |
-| `BASE_URL` | `http://localhost:$PORT` | Public base URL used to render shareable links. |
-| `DATA_DIR` | `./data` | Directory for the SQLite DB and uploaded pixel images. |
-| `SESSION_SECRET` | *(random, ephemeral)* | Secret for signing sessions — **set this in production**, or you'll be logged out on every restart. |
-| `TRUST_PROXY` | `false` | Honour `X-Forwarded-For`/`X-Real-IP`. Only enable behind a trusted proxy. |
-| `COOKIE_SECURE` | `false` | Mark the session cookie `Secure`. Enable once serving over HTTPS. |
+| **Redirect / shortener** | `/s/{slug}` | A normal-looking short link. Logs the visitor, then redirects to a real URL you choose. |
+| **Tracking pixel** | `/i/{slug}.png` | A 1×1 image (or your own upload) to embed in an email/document. Logs when it loads. |
+| **GPS decoy page** | `/g/{slug}` | A themed page that requests browser geolocation — or live-proxies a real page instead, with the same capture script injected. |
+| **Cloned / preview link** | `/p/{slug}` | **Live-proxies** a real destination — served directly, title/description/OG tags intact, so it unfurls identically to the original in chat apps. |
 
-## Architecture
+Every visit captures (where available): IP, geolocated country/region/city and ISP/org/ASN,
+device/OS/browser, referer, and a few JS-side signals (timezone, screen size, platform). GPS
+events additionally store precise coordinates from the browser's Geolocation API.
 
-- **Backend:** Go 1.26, standard-library `net/http` (pattern-based `ServeMux`), no web
-  framework.
-- **Database:** SQLite via the pure-Go `modernc.org/sqlite` driver — no cgo, single static
-  binary.
-- **Frontend:** server-rendered `html/template` pages + vanilla JS, Chart.js for graphs and
-  Leaflet for the location map, both vendored locally (`web/static/`) — no CDN dependency at
-  runtime except OpenStreetMap map tiles on the link-detail page.
-- **GeoIP enrichment:** [ip-api.com](https://ip-api.com) free JSON API, in-memory cached,
-  toggleable in Settings.
-- **Live-proxy clone engine:** `golang.org/x/net/html` for parsing/rewriting — no headless
-  browser (see [above](#live-proxy-clone-engine-clonepreview-links--optional-gps-decoy-clone)).
-- **QR codes:** `github.com/skip2/go-qrcode`, generated server-side, no external service.
-- **Webhooks:** plain `net/http` POSTs to a self-hosted ntfy or Gotify server — no vendored
-  client library.
-- Everything (templates + static assets) is embedded into the binary with `//go:embed`, so
-  the Docker image is a single self-contained executable plus its SQLite data volume.
+## Key features
 
-## Conceal mode (Admin → Settings)
+- **Link expiration** — expiry date and/or max-click count, with a one-time "expired" webhook.
+- **QR codes**, **CSV export**, and a **searchable global event log** alongside each link's own.
+- **Webhook notifications** via self-hosted [ntfy](https://ntfy.sh) or [Gotify](https://gotify.net),
+  with a separate high-priority alert for GPS captures and per-link channel overrides.
+- **GeoIP toggle** — turn off outbound `ip-api.com` lookups entirely; events still log
+  IP/device/timestamp.
+- **Conceal mode** — disguises the admin login/dashboard as a self-hosted Nextcloud instance.
+  Details on the [Conceal Mode](../../wiki/Conceal-Mode) wiki page.
+- **Live-proxy clone engine** — a Service Worker reroutes the browser's own resource fetches
+  through this server at the network layer, so cloned pages keep working (including
+  React/Next.js-hydrated sites) without ever leaving your domain. Deep dive on the
+  [Live-Proxy Clone Engine](../../wiki/Live-Proxy-Clone-Engine) wiki page.
+- Single admin account (bcrypt + signed sessions + CSRF), dark-mode-aware dashboard, Leaflet
+  map on each link's detail page.
 
-A toggle that disguises the admin-facing surface — the login page, dashboard/page titles, and
-site favicon — as a generic self-hosted [Nextcloud](https://nextcloud.com) instance, so a
-casual visitor, port scanner, or a glance at your browser tab can't tell IPGrab is running
-here. This is the same idea as a red-team C2 team-server hiding behind a bland login page:
-infrastructure OPSEC, not a mechanism aimed at other people.
+## Architecture, at a glance
 
-- **Cosmetic only.** The disguised login form still authenticates only your one real admin
-  account, exactly like the normal login page — nothing extra is captured, logged, or stored
-  about what anyone else types into it.
-- **Uses the real Nextcloud logo, favicon, and login background** — fetched from an official
-  `nextcloud` Docker image and bundled locally (`web/conceal/`, see the README there), not
-  hand-drawn approximations. The login page's exact markup, colors, and layout were captured
-  from a real running instance too, down to floating labels and the show/hide-password toggle.
-  These assets are served at paths that mirror Nextcloud's own real asset URLs
-  (`/core/img/logo/logo.svg`, etc.) rather than anything containing the word "conceal" —
-  view-source on the disguised page won't give it away.
-- **Doesn't survive deep inspection.** It's the real login page's markup/assets, but it doesn't
-  reproduce Nextcloud's actual HTTP response headers or backend API endpoints (`/status.php`,
-  `/ocs/`, `/index.php/login`, WebAuthn, etc.) — the login form posts to this app's own
-  `/login`, not a real Nextcloud backend. It defeats a visual/casual inspection, not a
-  thorough technical fingerprinting attempt (probing responses, hitting Nextcloud-specific
-  API routes that don't exist here, etc.).
-- **Doesn't cover first-run setup.** Conceal mode is a setting toggled from the authenticated
-  dashboard, so it can only be turned on *after* your admin account already exists — the
-  one-time `/setup` claim page always shows real IPGrab branding. Finish setup and enable
-  conceal mode *before* pointing a public subdomain at this instance or sharing any capture
-  links.
-- The icon used is an original blue "cloud" mark evocative of Nextcloud's brand color, not a
-  copy of their actual logo artwork.
-- This applies only to the admin login/dashboard. The public capture links (`/s/`, `/i/`,
-  `/g/`, `/p/`) already have their own independent per-link disguises (custom destination,
-  uploaded image, decoy theme, OG preview) set when you create each link.
+Go 1.26 + stdlib `net/http`, no web framework. SQLite via the pure-Go `modernc.org/sqlite`
+driver (no cgo). Server-rendered `html/template` + vanilla JS frontend, Chart.js + Leaflet
+vendored locally. Everything (templates, static assets) is embedded into one binary via
+`//go:embed` — the Docker image is a single self-contained executable.
+
+Full breakdown — package layout, the clone engine's Service Worker mechanism, the SSRF guard,
+and known limitations — is in the [Wiki](../../wiki).
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0** — see
-[`LICENSE`](LICENSE) for the full text. You're free to use, modify, and self-host it, including
-for commercial engagements, provided derivative works you distribute stay under GPLv3 too. No
-warranty. This license is independent of the usage disclaimer above — both apply.
+Licensed under the **GNU General Public License v3.0** — see [`LICENSE`](LICENSE). Free to
+use, modify, and self-host, including commercially, provided derivative works you distribute
+stay under GPLv3 too. No warranty. Independent of the usage disclaimer above — both apply.
