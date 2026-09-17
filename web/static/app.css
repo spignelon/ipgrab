@@ -187,6 +187,7 @@ input.full-width { width: 100%; }
   position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
   align-items: center; justify-content: center; z-index: 1000;
 }
+.qr-modal[hidden] { display: none; }
 .qr-modal-card {
   background: var(--card); border: 1px solid var(--border); border-radius: 14px;
   padding: 24px; position: relative; text-align: center;
