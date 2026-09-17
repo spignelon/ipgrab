@@ -12,8 +12,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/spignelon/ipgrab/internal/netguard"
 )
 
 // Supported webhook backend types.
@@ -61,11 +59,21 @@ func (c Config) Enabled() bool {
 	return c.Type == TypeNtfy || c.Type == TypeGotify
 }
 
-// The server URL is entirely admin-configurable (Settings), which makes it
-// exactly the same shape of SSRF vector as the live-proxy clone engine's
-// destination field — guard it the same way, via the shared netguard
-// transport, rather than making an unrestricted request to it.
-var httpClient = &http.Client{Timeout: 4 * time.Second, Transport: netguard.Transport()}
+// Deliberately NOT routed through netguard's SSRF-blocking transport, unlike
+// the live-proxy clone engine. The threat model is different: a clone
+// destination's fetched content is relayed straight back to any anonymous
+// visitor, so SSRF there lets a compromised admin session leak internal
+// data through a public link. A webhook target's response is never exposed
+// to anyone (fire-and-forget, errors only ever logged server-side) — and
+// self-hosting ntfy/Gotify on a private address or as a sibling container
+// on the same docker-compose network (this project's own recommended setup)
+// is the normal case, not an edge case. An earlier pass here added the
+// netguard transport anyway, reasoning purely by "it's admin-configured, so
+// guard it like the clone engine" without weighing that tradeoff — it broke
+// exactly that normal case (verified: saving a webhook URL pointing at a
+// sibling container's private IP and sending a test notification failed
+// with "refusing to connect to non-public address") and was reverted.
+var httpClient = &http.Client{Timeout: 4 * time.Second}
 
 // SendHit fires a normal-priority notification for a link click/view/pixel
 // event, if OnHit is enabled. channelOverride (a link's own Config.Channel)

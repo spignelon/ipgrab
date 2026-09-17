@@ -1,10 +1,13 @@
 package e2e
 
 import (
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestConcealModeToggle exercises the conceal-mode setting end to end: it
@@ -113,6 +116,54 @@ func TestEventsCSVDefusesFormulaInjection(t *testing.T) {
 	}
 	if !strings.Contains(body, "cmd|'/c calc'!A1") {
 		t.Fatalf("CSV export lost the user-agent value entirely (should be defused, not dropped): %s", body)
+	}
+}
+
+// TestWebhookDeliversToPrivateNetworkTarget guards against a real
+// regression caught after the fact: an early pass at the security review
+// routed the webhook notifier through the same SSRF-blocking transport as
+// the live-proxy clone engine, reasoning it was "just as admin-configured."
+// That broke the normal case — self-hosting ntfy/Gotify on a private
+// address or as a sibling container on the same docker-compose network,
+// which this project's own docs recommend — verified directly against a
+// real container before being reverted. This test locks that in: a webhook
+// target on loopback (the same address class the clone engine's guard
+// would refuse) must still receive the notification.
+func TestWebhookDeliversToPrivateNetworkTarget(t *testing.T) {
+	received := make(chan string, 1)
+	fakeNtfy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		received <- string(body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer fakeNtfy.Close() // a loopback address — exactly what netguard would refuse for the clone engine
+
+	a := newTestApp(t)
+	client := a.authedClient(t)
+
+	a.postForm(t, client, "/admin/settings/webhook", url.Values{
+		"webhook_type":     {"ntfy"},
+		"webhook_url":      {fakeNtfy.URL},
+		"webhook_topic":    {"test"},
+		"webhook_priority": {"default"},
+		"webhook_on_hit":   {"1"},
+	}).Body.Close()
+
+	nr := noRedirectClient(client)
+	resp := a.postForm(t, nr, "/admin/settings/webhook/test", nil)
+	defer resp.Body.Close()
+	loc := resp.Header.Get("Location")
+	if strings.Contains(loc, "err=") {
+		t.Fatalf("test notification to a private-network target failed: %s", loc)
+	}
+
+	select {
+	case body := <-received:
+		if !strings.Contains(body, "you can see this") {
+			t.Fatalf("fake ntfy server got unexpected body: %s", body)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("fake ntfy server never received the test notification")
 	}
 }
 
