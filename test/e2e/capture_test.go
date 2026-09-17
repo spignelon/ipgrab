@@ -109,6 +109,55 @@ func TestGPSDecoyCapture(t *testing.T) {
 	}
 }
 
+// TestGPSCollectCannotTamperWithOtherLinksEvents is the regression test for
+// an IDOR found during a security review: GPSCollect used to attach
+// whatever event_id the POST body claimed with no check that it belonged
+// to the link in the URL, so any visitor to any GPS link could forge fake
+// GPS coordinates onto an event belonging to a completely different link
+// (even retyping an unrelated click/view event to "gps"). It also never
+// checked the link was actually a GPS link at all.
+func TestGPSCollectCannotTamperWithOtherLinksEvents(t *testing.T) {
+	a := newTestApp(t)
+	client := a.authedClient(t)
+	a.createLink(t, client, url.Values{"type": {"redirect"}, "slug": {"victim1"}, "destination": {"https://example.com"}}).Body.Close()
+	a.createLink(t, client, url.Values{"type": {"gps"}, "slug": {"attacker1"}, "theme": {"cats"}}).Body.Close()
+
+	anon := noRedirectClient(&http.Client{Jar: client.Jar})
+	a.get(t, anon, "/s/victim1").Body.Close() // logs a plain "click" event on victim1
+
+	victimEvents := a.eventsJSON(t, client, "victim1")
+	if len(victimEvents) != 1 {
+		t.Fatalf("expected 1 event for victim1, got %d", len(victimEvents))
+	}
+	victimEventID := int64(victimEvents[0]["ID"].(float64))
+	victimType := victimEvents[0]["Type"].(string)
+
+	// Attempt to forge GPS coordinates onto victim1's event via the
+	// unrelated attacker1 GPS link's own /loc endpoint.
+	payload := `{"event_id":` + itoa(victimEventID) + `,"lat":1.23,"lon":4.56,"accuracy":5,"fingerprint":{}}`
+	req, err := http.NewRequest(http.MethodPost, a.srv.URL+"/g/attacker1/loc", strings.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	resp.Body.Close()
+
+	after := a.eventsJSON(t, client, "victim1")
+	if len(after) != 1 {
+		t.Fatalf("expected still 1 event for victim1, got %d", len(after))
+	}
+	if after[0]["Type"].(string) != victimType {
+		t.Fatalf("victim1's event type changed from %q to %q via an unrelated link's /loc endpoint", victimType, after[0]["Type"])
+	}
+	if lat, ok := after[0]["GPSLat"].(float64); ok && lat != 0 {
+		t.Fatalf("victim1's event got forged GPS coordinates (%v) via an unrelated link's /loc endpoint", lat)
+	}
+}
+
 // TestCloneCapture verifies visiting a Clone/Preview link's bounce page
 // logs a "view" event and eventually serves the real target's HTML.
 func TestCloneCapture(t *testing.T) {

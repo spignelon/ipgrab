@@ -93,10 +93,19 @@ func (a *testApp) authedClient(t *testing.T) *http.Client {
 	}
 	client := &http.Client{Jar: jar}
 
+	// GET /setup first to obtain its CSRF cookie — the endpoint requires it
+	// on the POST, just like every other state-changing action.
+	getResp, err := client.Get(a.srv.URL + "/setup")
+	if err != nil {
+		t.Fatalf("setup get: %v", err)
+	}
+	getResp.Body.Close()
+
 	form := url.Values{
-		"username": {"admin"},
-		"password": {"password12345"},
-		"confirm":  {"password12345"},
+		"username":   {"admin"},
+		"password":   {"password12345"},
+		"confirm":    {"password12345"},
+		"csrf_token": {a.csrfFromJar(client)},
 	}
 	resp, err := client.PostForm(a.srv.URL+"/setup", form)
 	if err != nil {

@@ -42,6 +42,9 @@ type Handler struct {
 	// settings are saved from the admin Settings page.
 	notifyMu  sync.RWMutex
 	notifyCfg notify.Config
+
+	// loginLimiter rate-limits failed /login attempts per client IP.
+	loginLimiter *loginThrottle
 }
 
 // New constructs a Handler and parses all templates.
@@ -89,7 +92,7 @@ func New(database *db.DB, cfg *config.Config, am *auth.Manager, geo *geoip.Clien
 	if err != nil {
 		return nil, err
 	}
-	h := &Handler{DB: database, Cfg: cfg, Auth: am, Geo: geo, tmpl: t}
+	h := &Handler{DB: database, Cfg: cfg, Auth: am, Geo: geo, tmpl: t, loginLimiter: newLoginThrottle()}
 	if enabled, err := database.ConcealEnabled(); err != nil {
 		log.Printf("WARNING: could not load conceal-mode setting, defaulting to off: %v", err)
 	} else {

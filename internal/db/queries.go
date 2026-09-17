@@ -434,18 +434,24 @@ func (db *DB) InsertEvent(e *models.Event) (int64, error) {
 }
 
 // AttachGPS updates an existing event with browser geolocation data.
-func (db *DB) AttachGPS(id int64, lat, lon, accuracy float64, headersJSON string) error {
-	_, err := db.Exec(`UPDATE events SET type = ?, gps_lat = ?, gps_lon = ?, gps_accuracy = ?, headers_json = ? WHERE id = ?`,
-		models.EventGPS, lat, lon, accuracy, headersJSON, id)
+// linkID scopes the update to the event actually belonging to that link —
+// without it, any visitor could forge an arbitrary event_id in the POST
+// body and overwrite GPS coordinates on an event belonging to a completely
+// different link.
+func (db *DB) AttachGPS(id, linkID int64, lat, lon, accuracy float64, headersJSON string) error {
+	_, err := db.Exec(`UPDATE events SET type = ?, gps_lat = ?, gps_lon = ?, gps_accuracy = ?, headers_json = ? WHERE id = ? AND link_id = ?`,
+		models.EventGPS, lat, lon, accuracy, headersJSON, id, linkID)
 	return err
 }
 
 // AttachFingerprint merges JS-side fingerprint signals (from the clone
 // live-proxy's beacon) into an existing event's headers_json blob, under a
 // "js_fingerprint" key, preserving whatever was already recorded there.
-func (db *DB) AttachFingerprint(id int64, fp map[string]string) error {
+// linkID scopes both the read and the write to the event actually belonging
+// to that link — see the identical note on AttachGPS.
+func (db *DB) AttachFingerprint(id, linkID int64, fp map[string]string) error {
 	var hdr string
-	if err := db.QueryRow(`SELECT headers_json FROM events WHERE id = ?`, id).Scan(&hdr); err != nil {
+	if err := db.QueryRow(`SELECT headers_json FROM events WHERE id = ? AND link_id = ?`, id, linkID).Scan(&hdr); err != nil {
 		return err
 	}
 	m := map[string]any{}
@@ -455,7 +461,7 @@ func (db *DB) AttachFingerprint(id int64, fp map[string]string) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(`UPDATE events SET headers_json = ? WHERE id = ?`, string(b), id)
+	_, err = db.Exec(`UPDATE events SET headers_json = ? WHERE id = ? AND link_id = ?`, string(b), id, linkID)
 	return err
 }
 

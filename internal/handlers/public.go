@@ -434,6 +434,10 @@ func (h *Handler) GPSCollect(w http.ResponseWriter, r *http.Request) {
 	if link == nil {
 		return
 	}
+	if link.Type != models.TypeGPS {
+		http.NotFound(w, nil)
+		return
+	}
 	var p gpsPayload
 	if err := json.NewDecoder(io.LimitReader(r.Body, 8<<10)).Decode(&p); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -441,14 +445,17 @@ func (h *Handler) GPSCollect(w http.ResponseWriter, r *http.Request) {
 	}
 	fp, _ := json.Marshal(p.Fingerprint)
 	if p.EventID > 0 {
-		if err := h.DB.AttachGPS(p.EventID, p.Lat, p.Lon, p.Accuracy, string(fp)); err != nil {
+		// Scoped to this link's own id — without that, a forged event_id in
+		// the POST body could overwrite GPS coordinates on an event
+		// belonging to an entirely different link (see queries.go).
+		if err := h.DB.AttachGPS(p.EventID, link.ID, p.Lat, p.Lon, p.Accuracy, string(fp)); err != nil {
 			log.Printf("gps attach: %v", err)
 		}
 	} else {
 		// No prior event id (edge case): create a fresh GPS event.
 		id := h.capture(r, link, models.EventGPS)
 		if id > 0 {
-			_ = h.DB.AttachGPS(id, p.Lat, p.Lon, p.Accuracy, string(fp))
+			_ = h.DB.AttachGPS(id, link.ID, p.Lat, p.Lon, p.Accuracy, string(fp))
 		}
 	}
 	// A real fix (permission granted) carries non-zero coordinates — the
@@ -665,13 +672,19 @@ func (h *Handler) ClonePageFingerprint(w http.ResponseWriter, r *http.Request) {
 	if link == nil {
 		return
 	}
+	if link.Type != models.TypeClone {
+		http.NotFound(w, nil)
+		return
+	}
 	var p fpPayload
 	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&p); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 	if p.EventID > 0 {
-		if err := h.DB.AttachFingerprint(p.EventID, p.Fingerprint); err != nil {
+		// Scoped to this link's own id — see the identical note in
+		// GPSCollect / queries.go's AttachFingerprint.
+		if err := h.DB.AttachFingerprint(p.EventID, link.ID, p.Fingerprint); err != nil {
 			log.Printf("clone fingerprint attach: %v", err)
 		}
 	}

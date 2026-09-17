@@ -48,7 +48,11 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodGet {
-		h.render(w, "setup.html", map[string]any{})
+		h.render(w, "setup.html", map[string]any{"CSRF": h.Auth.IssueCSRF(w)})
+		return
+	}
+	if !auth.VerifyCSRF(r) {
+		http.Error(w, "invalid csrf token", http.StatusForbidden)
 		return
 	}
 
@@ -58,6 +62,7 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 	if username == "" || len(pw) < 8 || pw != confirm {
 		h.render(w, "setup.html", map[string]any{
 			"Error": "Username required and passwords must match (min 8 characters).",
+			"CSRF":  h.Auth.IssueCSRF(w),
 		})
 		return
 	}
@@ -99,6 +104,14 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ip := h.clientIP(r)
+	if ok, retryAfter := h.loginLimiter.allow(ip); !ok {
+		h.render(w, "login.html", map[string]any{
+			"Error": fmt.Sprintf("Too many failed attempts. Try again in %d seconds.", int(retryAfter.Seconds())+1),
+		})
+		return
+	}
+
 	admin, err := h.DB.GetAdmin()
 	if err != nil {
 		internalError(w, "login: get admin", err)
@@ -107,9 +120,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimSpace(r.FormValue("username"))
 	pw := r.FormValue("password")
 	if username != admin.Username || !auth.CheckPassword(admin.PasswordHash, pw) {
+		h.loginLimiter.recordFailure(ip)
 		h.render(w, "login.html", map[string]any{"Error": "Invalid credentials."})
 		return
 	}
+	h.loginLimiter.recordSuccess(ip)
 	if err := h.Auth.Login(w); err != nil {
 		internalError(w, "login: create session", err)
 		return
@@ -633,12 +648,31 @@ func (h *Handler) EventsCSV(w http.ResponseWriter, r *http.Request) {
 	})
 	for _, e := range events {
 		_ = cw.Write([]string{
-			e.Timestamp.Format(time.RFC3339), e.LinkSlug, e.LinkLabel, e.Type, e.IP, e.Country,
-			e.Region, e.City, e.ISP, e.Org, e.ASN, e.Device, e.OS, e.Browser,
+			e.Timestamp.Format(time.RFC3339), csvSafe(e.LinkSlug), csvSafe(e.LinkLabel), e.Type,
+			csvSafe(e.IP), csvSafe(e.Country), csvSafe(e.Region), csvSafe(e.City), csvSafe(e.ISP),
+			csvSafe(e.Org), csvSafe(e.ASN), csvSafe(e.Device), csvSafe(e.OS), csvSafe(e.Browser),
 			floatOrEmpty(e.GPSLat), floatOrEmpty(e.GPSLon), floatOrEmpty(e.GPSAccuracy),
-			e.AcceptLanguage, e.UserAgent,
+			csvSafe(e.AcceptLanguage), csvSafe(e.UserAgent),
 		})
 	}
+}
+
+// csvSafe defuses CSV/formula injection: several of these fields (most
+// directly the User-Agent, and — if TRUST_PROXY is on — the client IP) are
+// attacker-controlled free text. A value starting with =, +, -, or @ is
+// interpreted as a formula by Excel/LibreOffice/Sheets when the export is
+// opened, which can leak data or run commands on whoever opens it (this
+// admin). Prefixing a leading tab defuses it while leaving the value's text
+// unchanged for anyone just reading the cell.
+func csvSafe(s string) string {
+	if s == "" {
+		return s
+	}
+	switch s[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "\t" + s
+	}
+	return s
 }
 
 // shareURL returns the public capture URL for a link.

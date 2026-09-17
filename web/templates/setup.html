@@ -15,6 +15,7 @@
     </p>
     {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
     <form method="post" action="/setup">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
       <label>Username
         <input type="text" name="username" required autofocus autocomplete="username">
       </label>

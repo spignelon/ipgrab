@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spignelon/ipgrab/internal/mirror"
+	"github.com/spignelon/ipgrab/internal/netguard"
 )
 
 // newTargetServer spins up a local HTTP server standing in for a real
@@ -224,8 +224,8 @@ func TestMirrorServiceWorkerScript(t *testing.T) {
 func TestMirrorSSRFGuardBlocksPrivateTargets(t *testing.T) {
 	// This test verifies the real guard, so undo TestMain's blanket
 	// allowance for the duration of this test only.
-	mirror.AllowPrivateTargetsForTesting = false
-	t.Cleanup(func() { mirror.AllowPrivateTargetsForTesting = true })
+	netguard.AllowPrivateForTesting = false
+	t.Cleanup(func() { netguard.AllowPrivateForTesting = true })
 
 	privateTarget := newTargetServer(t, `<html><body>TOP-SECRET-INTERNAL-CONTENT</body></html>`)
 	defer privateTarget.Close() // listens on 127.0.0.1 — exactly what guardURL must refuse

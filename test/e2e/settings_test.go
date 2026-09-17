@@ -81,6 +81,41 @@ func TestGeoIPToggleSkipsLookupFields(t *testing.T) {
 	t.Fatal("no click event found for /s/geooff")
 }
 
+// TestEventsCSVDefusesFormulaInjection is the regression test for a real
+// CSV/formula-injection gap found during a security review: a visitor's
+// User-Agent (attacker-controlled, always) was written into the CSV export
+// completely unescaped. A value starting with =/+/-/@ is interpreted as a
+// formula by Excel/LibreOffice/Sheets when the admin opens the export,
+// which can exfiltrate data or run commands on the admin's own machine.
+func TestEventsCSVDefusesFormulaInjection(t *testing.T) {
+	a := newTestApp(t)
+	client := a.authedClient(t)
+	a.createLink(t, client, url.Values{"type": {"redirect"}, "slug": {"csvtest"}, "destination": {"https://example.com"}}).Body.Close()
+
+	req, err := http.NewRequest(http.MethodGet, a.srv.URL+"/s/csvtest", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("User-Agent", `=cmd|'/c calc'!A1`)
+	nr := noRedirectClient(client)
+	resp, err := nr.Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
+	resp.Body.Close()
+
+	csvResp := a.get(t, client, "/admin/events.csv")
+	defer csvResp.Body.Close()
+	body := bodyString(t, csvResp)
+
+	if strings.Contains(body, "\n=cmd") || strings.Contains(body, ",=cmd") {
+		t.Fatalf("CSV export contains an unescaped formula-injection payload: %s", body)
+	}
+	if !strings.Contains(body, "cmd|'/c calc'!A1") {
+		t.Fatalf("CSV export lost the user-agent value entirely (should be defused, not dropped): %s", body)
+	}
+}
+
 // TestEventsSearchAndDelete exercises the admin events log's search filter
 // and per-event / bulk delete.
 func TestEventsSearchAndDelete(t *testing.T) {

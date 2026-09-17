@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/spignelon/ipgrab/internal/netguard"
 )
 
 // Supported webhook backend types.
@@ -50,7 +52,7 @@ type Config struct {
 
 	OnHit bool // whether link hits should notify at all
 
-	GPSAlertEnabled  bool   // separate high-priority alert for GPS captures
+	GPSAlertEnabled  bool // separate high-priority alert for GPS captures
 	GPSAlertPriority string
 }
 
@@ -59,7 +61,11 @@ func (c Config) Enabled() bool {
 	return c.Type == TypeNtfy || c.Type == TypeGotify
 }
 
-var httpClient = &http.Client{Timeout: 4 * time.Second}
+// The server URL is entirely admin-configurable (Settings), which makes it
+// exactly the same shape of SSRF vector as the live-proxy clone engine's
+// destination field — guard it the same way, via the shared netguard
+// transport, rather than making an unrestricted request to it.
+var httpClient = &http.Client{Timeout: 4 * time.Second, Transport: netguard.Transport()}
 
 // SendHit fires a normal-priority notification for a link click/view/pixel
 // event, if OnHit is enabled. channelOverride (a link's own Config.Channel)

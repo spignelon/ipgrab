@@ -56,6 +56,22 @@ func (m *Manager) Login(w http.ResponseWriter) error {
 	return nil
 }
 
+// setupCSRFTTL is short since the first-run /setup form is meant to be
+// filled in immediately after deployment, not left open indefinitely.
+const setupCSRFTTL = 15 * time.Minute
+
+// IssueCSRF sets a CSRF cookie without creating a session, and returns the
+// token value to embed in the form directly (VerifyCSRF later reads the
+// cookie from the request, but this same response can't see its own
+// Set-Cookie yet). Used by the pre-login /setup form, which — unlike every
+// other state-changing action — has no existing session to piggyback a
+// CSRF token off of.
+func (m *Manager) IssueCSRF(w http.ResponseWriter) string {
+	tok := token(24)
+	m.setCookie(w, csrfCookie, tok, setupCSRFTTL, false)
+	return tok
+}
+
 // Logout clears the current session server-side and expires the cookies.
 func (m *Manager) Logout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(sessionCookie); err == nil {

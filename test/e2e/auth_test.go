@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -79,6 +80,36 @@ func TestLoginWrongPassword(t *testing.T) {
 	}
 }
 
+// TestSetupRequiresCSRF is the regression test for a real gap found during
+// a security review: POST /setup — the one state-changing action reachable
+// before any session exists — had no CSRF check at all, unlike every other
+// admin action. A forged cross-site POST could otherwise race-claim the
+// admin account during the narrow window between deployment and the real
+// operator completing setup.
+func TestSetupRequiresCSRF(t *testing.T) {
+	a := newTestApp(t)
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	// No prior GET /setup, so no CSRF cookie exists — matches an attacker
+	// forging a bare cross-site POST directly.
+	resp, err := client.PostForm(a.srv.URL+"/setup", url.Values{
+		"username": {"attacker"},
+		"password": {"attackerpass123"},
+		"confirm":  {"attackerpass123"},
+	})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("setup without csrf_token: got %d, want 403", resp.StatusCode)
+	}
+	if exists, _ := a.db.AdminExists(); exists {
+		t.Fatal("admin account was created despite the missing CSRF token")
+	}
+}
+
 // TestCSRFEnforced verifies a state-changing admin POST is rejected without
 // a matching csrf_token, even from an authenticated session.
 func TestCSRFEnforced(t *testing.T) {
@@ -96,6 +127,34 @@ func TestCSRFEnforced(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("create link without csrf_token: got %d, want 403", resp.StatusCode)
+	}
+}
+
+// TestLoginThrottled is the regression test for a hardening gap found
+// during a security review: /login previously had no protection against
+// unlimited-rate password guessing beyond bcrypt's inherent per-attempt
+// cost. After enough failures it should start rejecting further attempts
+// with a lockout message instead of silently comparing forever.
+func TestLoginThrottled(t *testing.T) {
+	a := newTestApp(t)
+	a.authedClient(t) // claims the instance
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	var lastBody string
+	for i := 0; i < 8; i++ {
+		resp, err := client.PostForm(a.srv.URL+"/login", url.Values{
+			"username": {"admin"},
+			"password": {"wrong-password"},
+		})
+		if err != nil {
+			t.Fatalf("attempt %d: %v", i, err)
+		}
+		lastBody = bodyString(t, resp)
+	}
+	if !strings.Contains(lastBody, "Too many failed attempts") {
+		t.Fatalf("after 8 failed logins, expected a lockout message, got: %s", lastBody)
 	}
 }
 

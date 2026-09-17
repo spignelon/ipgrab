@@ -5,9 +5,11 @@
 // visitor's browser keeps talking to this server, not the origin.
 //
 // Because this fetches arbitrary operator-supplied URLs on the server's
-// behalf, every fetch goes through guardURL, which refuses loopback,
-// private, link-local, and unspecified addresses (and non-http(s) schemes)
-// to prevent SSRF against internal services.
+// behalf, every fetch goes through the shared internal/netguard transport,
+// which pins each connection to a validated public IP (refusing loopback,
+// private, link-local, and unspecified addresses, and non-http(s) schemes)
+// to prevent SSRF against internal services — including via DNS rebinding,
+// since the validated address is what's actually dialed, not re-resolved.
 package mirror
 
 import (
@@ -15,13 +17,13 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/spignelon/ipgrab/internal/netguard"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
@@ -33,69 +35,23 @@ const (
 )
 
 var httpClient = &http.Client{
-	Timeout: fetchTimeout,
+	Timeout:   fetchTimeout,
+	Transport: netguard.Transport(),
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 5 {
 			return fmt.Errorf("too many redirects")
 		}
-		if err := guardURL(req.URL.String()); err != nil {
-			return err
-		}
-		return nil
+		// The scheme/host shape check is cheap to redo per hop; the actual
+		// IP-address guard happens uniformly for every connection this
+		// client makes (including this redirect) inside netguard's dialer.
+		return netguard.GuardScheme(req.URL.String())
 	},
-}
-
-// AllowPrivateTargetsForTesting disables guardURL's loopback/private-address
-// restriction when true. It exists ONLY so the end-to-end test suite
-// (test/e2e) can point the clone engine at a local httptest server standing
-// in for a real site, without depending on the real internet in CI. It
-// defaults to false (fully guarded) and must never be set outside tests —
-// doing so reopens the exact SSRF hole guardURL exists to close.
-var AllowPrivateTargetsForTesting bool
-
-// guardURL rejects any target that resolves to a non-public address, or
-// that isn't plain http/https. Called before every fetch (initial page and
-// every sub-resource) so operators can't point the proxy at internal
-// services (169.254.169.254, localhost, RFC1918 ranges, etc).
-func guardURL(rawURL string) error {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return fmt.Errorf("invalid URL: %w", err)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("unsupported scheme %q", u.Scheme)
-	}
-	host := u.Hostname()
-	if host == "" {
-		return fmt.Errorf("missing host")
-	}
-	if AllowPrivateTargetsForTesting {
-		return nil
-	}
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		return fmt.Errorf("dns lookup failed: %w", err)
-	}
-	for _, ip := range ips {
-		if !isPublic(ip) {
-			return fmt.Errorf("refusing to fetch non-public address %s", ip)
-		}
-	}
-	return nil
-}
-
-func isPublic(ip net.IP) bool {
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
-		return false
-	}
-	return true
 }
 
 // fetch performs a guarded GET of rawURL, forwarding a subset of the
 // visitor's request headers, and returns the response (caller closes Body).
 func fetch(rawURL string, r *http.Request) (*http.Response, error) {
-	if err := guardURL(rawURL); err != nil {
+	if err := netguard.GuardScheme(rawURL); err != nil {
 		return nil, err
 	}
 	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
@@ -207,7 +163,7 @@ func injectBeforeBodyCloseRaw(html []byte, script template.HTML) []byte {
 // happens here at all, since the service worker already reroutes every
 // resource fetch at the network layer using the target's original URLs.
 func Relay(w http.ResponseWriter, r *http.Request, target string) error {
-	if err := guardURL(target); err != nil {
+	if err := netguard.GuardScheme(target); err != nil {
 		return err
 	}
 	var body io.Reader
