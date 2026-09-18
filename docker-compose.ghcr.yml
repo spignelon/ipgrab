@@ -1,0 +1,36 @@
+# Runs the prebuilt image from GHCR instead of building locally - nothing
+# to compile, no Dockerfile/source needed on this machine at all. Useful on
+# weak/shared-CPU hosts where `docker compose up --build` would otherwise
+# peg the box compiling Go.
+#
+# Usage (no repo clone needed - this file works standalone):
+#   curl -O https://raw.githubusercontent.com/spignelon/netra/main/docker-compose.ghcr.yml
+#   SESSION_SECRET=$(openssl rand -hex 32) BASE_URL=http://YOUR_HOST:8080 \
+#     docker compose -f docker-compose.ghcr.yml up -d
+#
+# Same environment variables as docker-compose.yml (see .env.example in the
+# repo, or the Quick Start wiki page) - inline, shell-exported, or via a
+# .env file next to this one all work identically.
+#
+# NETRA_TAG picks which published image to run:
+#   latest (default) - the current tagged release, e.g. after `git tag v1.3.0`
+#   edge              - built from the tip of the main branch on every push;
+#                        may be ahead of the latest release, not guaranteed stable
+#   vX.Y.Z            - a specific pinned release, e.g. v1.3.0
+services:
+  netra:
+    image: ghcr.io/spignelon/netra:${NETRA_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      PORT: ${PORT:-8080}
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in your .env file, or pass it inline}
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    volumes:
+      - netra_data:/data
+
+volumes:
+  netra_data:
