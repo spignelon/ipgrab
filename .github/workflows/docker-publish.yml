@@ -3,8 +3,12 @@ name: Publish Docker image
 # Builds the same multi-stage Dockerfile already in this repo (no separate
 # build definition to keep in sync) and pushes it to GHCR:
 #   - push to main        -> ghcr.io/spignelon/netra:edge (+ :sha-xxxxxxx)
-#   - push a v* tag        -> ghcr.io/spignelon/netra:latest and :vX.Y.Z
-# Runs entirely on GitHub-hosted runners; no external server/VPS involved.
+#   - push a v* tag        -> ghcr.io/spignelon/netra:latest and :vX.Y.Z, then
+#                             notifies the staging server (via ntfy) to pull
+#                             and redeploy - see the Wiki's GHCR Image
+#                             Publishing / deploy pages for how that's wired.
+# Runs entirely on GitHub-hosted runners; no external server/VPS involved in
+# the build itself.
 
 on:
   push:
@@ -61,3 +65,15 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Only on a release tag, and only after the image above has actually
+      # finished pushing - the staging server's ntfy subscriber just does
+      # `docker compose pull && up -d` on any message, so it must never fire
+      # before the new image exists in the registry. Doesn't deploy on
+      # :edge (main pushes) on purpose - see the comment at the top.
+      - name: Notify deploy server via ntfy
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          curl -sf -H "Authorization: Bearer ${{ secrets.NTFY_NETRA_DEPLOY_TOKEN }}" \
+               -d "netra ${{ github.ref_name }} published, deploying" \
+               "${{ secrets.NTFY_URL }}"
