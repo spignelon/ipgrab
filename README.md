@@ -1,6 +1,6 @@
 <p align="center"><img src="web/static/logo.svg" alt="Netra" height="90"></p>
 
-# Netra
+<h1 align="center">Netra</h1>
 
 A self-hosted IP address, device, and location intelligence toolkit for **authorized**
 security assessments — OSINT gathering, phishing-simulation exercises, and physical/remote

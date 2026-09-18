@@ -28,7 +28,10 @@
 </header>
 {{else}}
 <header class="topbar">
-  <a class="brand" href="/admin">🕸️ Netra</a>
+  <a class="brand" href="/admin" style="display:flex;align-items:center;gap:8px;">
+    <img src="/static/logo.svg" alt="Netra" style="height:22px;width:auto;">
+    Netra
+  </a>
   <nav>
     <a href="/admin" class="{{if eq .Nav "dashboard"}}active{{end}}">Dashboard</a>
     <a href="/admin/links" class="{{if eq .Nav "links"}}active{{end}}">Links</a>
