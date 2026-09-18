@@ -46,7 +46,7 @@ docker compose up -d --build
 Visit `BASE_URL` (e.g. `http://localhost:8080`) — you'll land on `/setup` to create the one
 admin account, then log in at `/login`.
 
-Data persists in the `ipgrab_data` Docker volume across `docker compose down`/`up`. See the
+Data persists in the `netra_data` Docker volume across `docker compose down`/`up`. See the
 Wiki's [Quick Start](../../wiki/Quick-Start) page for running without Docker, behind a reverse
 proxy, and the full environment-variable reference.
 

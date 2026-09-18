@@ -2,7 +2,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <title>{{if .Concealed}}Log in - Nextcloud{{else}}IPGrab — Login{{end}}</title>
+  <title>{{if .Concealed}}Log in - Nextcloud{{else}}Netra — Login{{end}}</title>
   {{template "head" .}}
   {{if .Concealed}}
   <style>
@@ -128,7 +128,7 @@
 {{else}}
 <body class="auth-body">
   <main class="auth-card">
-    <h1>🕸️ IPGrab</h1>
+    <h1>🕸️ Netra</h1>
     <p class="muted">Sign in to the admin dashboard.</p>
     {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
     <form method="post" action="/login">

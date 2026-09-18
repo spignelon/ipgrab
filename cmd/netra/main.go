@@ -1,4 +1,4 @@
-// Command ipgrab is a self-hosted IP & location intelligence toolkit for
+// Command netra is a self-hosted IP & location intelligence toolkit for
 // authorized security assessments. See README.md for the usage disclaimer.
 package main
 
@@ -12,12 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/spignelon/ipgrab/internal/app"
-	"github.com/spignelon/ipgrab/internal/auth"
-	"github.com/spignelon/ipgrab/internal/config"
-	"github.com/spignelon/ipgrab/internal/db"
-	"github.com/spignelon/ipgrab/internal/geoip"
-	"github.com/spignelon/ipgrab/internal/handlers"
+	"github.com/spignelon/netra/internal/app"
+	"github.com/spignelon/netra/internal/auth"
+	"github.com/spignelon/netra/internal/config"
+	"github.com/spignelon/netra/internal/db"
+	"github.com/spignelon/netra/internal/geoip"
+	"github.com/spignelon/netra/internal/handlers"
 )
 
 func main() {
@@ -48,7 +48,7 @@ func main() {
 
 	// Graceful shutdown.
 	go func() {
-		log.Printf("IPGrab listening on :%s (base URL %s)", cfg.Port, cfg.BaseURL)
+		log.Printf("Netra listening on :%s (base URL %s)", cfg.Port, cfg.BaseURL)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("server: %v", err)
 		}

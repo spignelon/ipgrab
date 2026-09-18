@@ -109,7 +109,7 @@ func (c Config) Test() error {
 	if !c.Enabled() {
 		return fmt.Errorf("no webhook backend configured")
 	}
-	return c.sendErr("IPGrab test notification", "If you can see this, your webhook is configured correctly.",
+	return c.sendErr("Netra test notification", "If you can see this, your webhook is configured correctly.",
 		orDefault(c.Priority, PriorityDefault), "")
 }
 

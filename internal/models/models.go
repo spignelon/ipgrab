@@ -1,4 +1,4 @@
-// Package models defines the core data structures persisted by IPGrab.
+// Package models defines the core data structures persisted by Netra.
 package models
 
 import "time"

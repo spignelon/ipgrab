@@ -1,4 +1,4 @@
-module github.com/spignelon/ipgrab
+module github.com/spignelon/netra
 
 go 1.26.0
 

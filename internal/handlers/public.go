@@ -15,12 +15,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spignelon/ipgrab/internal/db"
-	"github.com/spignelon/ipgrab/internal/geoip"
-	"github.com/spignelon/ipgrab/internal/mirror"
-	"github.com/spignelon/ipgrab/internal/models"
-	"github.com/spignelon/ipgrab/internal/uaparse"
-	"github.com/spignelon/ipgrab/web"
+	"github.com/spignelon/netra/internal/db"
+	"github.com/spignelon/netra/internal/geoip"
+	"github.com/spignelon/netra/internal/mirror"
+	"github.com/spignelon/netra/internal/models"
+	"github.com/spignelon/netra/internal/uaparse"
+	"github.com/spignelon/netra/web"
 )
 
 // transparent1x1PNG is a 1x1 fully transparent PNG used as the default pixel.
@@ -136,7 +136,7 @@ func (h *Handler) capture(r *http.Request, link *models.Link, eventType string) 
 		loc = "unknown location"
 	}
 	h.NotifyConfig().SendHit(
-		fmt.Sprintf("IPGrab: %s on %s", eventTypeName(eventType), link.DisplayName()),
+		fmt.Sprintf("Netra: %s on %s", eventTypeName(eventType), link.DisplayName()),
 		fmt.Sprintf("%s from %s (%s) — %s / %s", eventTypeName(eventType), ip, loc, ua.Device, ua.Browser),
 		link.Config.Channel,
 	)
@@ -182,7 +182,7 @@ func (h *Handler) notifyExpiredOnce(link *models.Link) {
 		return
 	}
 	h.NotifyConfig().SendExpired(
-		fmt.Sprintf("IPGrab: link expired — %s", link.DisplayName()),
+		fmt.Sprintf("Netra: link expired — %s", link.DisplayName()),
 		fmt.Sprintf("%s (%s) has reached its expiry (time limit or max clicks) and will no longer capture.",
 			link.DisplayName(), link.Slug),
 		link.Config.Channel,
@@ -463,7 +463,7 @@ func (h *Handler) GPSCollect(w http.ResponseWriter, r *http.Request) {
 	// high-priority alert only for an actual capture.
 	if p.Lat != 0 || p.Lon != 0 {
 		h.NotifyConfig().SendGPSAlert(
-			fmt.Sprintf("IPGrab: GPS captured — %s", link.DisplayName()),
+			fmt.Sprintf("Netra: GPS captured — %s", link.DisplayName()),
 			fmt.Sprintf("Precise location captured for %s: %f, %f (±%.0fm)", link.DisplayName(), p.Lat, p.Lon, p.Accuracy),
 			link.Config.Channel,
 		)

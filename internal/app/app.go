@@ -1,6 +1,6 @@
-// Package app wires together the full set of HTTP routes IPGrab serves —
+// Package app wires together the full set of HTTP routes Netra serves —
 // public capture surfaces, auth/setup, and the guarded admin API — into a
-// single http.Handler. It exists so cmd/ipgrab/main.go and the end-to-end
+// single http.Handler. It exists so cmd/netra/main.go and the end-to-end
 // test suite (test/e2e) build the exact same route table instead of two
 // hand-maintained copies that could drift apart.
 package app
@@ -11,12 +11,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/spignelon/ipgrab/internal/auth"
-	"github.com/spignelon/ipgrab/internal/handlers"
-	"github.com/spignelon/ipgrab/web"
+	"github.com/spignelon/netra/internal/auth"
+	"github.com/spignelon/netra/internal/handlers"
+	"github.com/spignelon/netra/web"
 )
 
-// NewMux builds the complete IPGrab route table.
+// NewMux builds the complete Netra route table.
 func NewMux(h *handlers.Handler, am *auth.Manager) http.Handler {
 	mux := http.NewServeMux()
 

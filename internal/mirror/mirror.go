@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spignelon/ipgrab/internal/netguard"
+	"github.com/spignelon/netra/internal/netguard"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )

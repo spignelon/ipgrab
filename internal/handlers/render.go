@@ -12,13 +12,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/spignelon/ipgrab/internal/auth"
-	"github.com/spignelon/ipgrab/internal/config"
-	"github.com/spignelon/ipgrab/internal/db"
-	"github.com/spignelon/ipgrab/internal/geoip"
-	"github.com/spignelon/ipgrab/internal/models"
-	"github.com/spignelon/ipgrab/internal/notify"
-	"github.com/spignelon/ipgrab/web"
+	"github.com/spignelon/netra/internal/auth"
+	"github.com/spignelon/netra/internal/config"
+	"github.com/spignelon/netra/internal/db"
+	"github.com/spignelon/netra/internal/geoip"
+	"github.com/spignelon/netra/internal/models"
+	"github.com/spignelon/netra/internal/notify"
+	"github.com/spignelon/netra/web"
 )
 
 // Handler bundles the dependencies shared across all routes.

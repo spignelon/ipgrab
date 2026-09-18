@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spignelon/ipgrab/internal/models"
+	"github.com/spignelon/netra/internal/models"
 )
 
 // sqliteTimeLayouts are the timestamp formats sqlite's CURRENT_TIMESTAMP and

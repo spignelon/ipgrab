@@ -4,10 +4,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/spignelon/ipgrab/internal/auth"
-	"github.com/spignelon/ipgrab/internal/config"
-	"github.com/spignelon/ipgrab/internal/db"
-	"github.com/spignelon/ipgrab/internal/geoip"
+	"github.com/spignelon/netra/internal/auth"
+	"github.com/spignelon/netra/internal/config"
+	"github.com/spignelon/netra/internal/db"
+	"github.com/spignelon/netra/internal/geoip"
 )
 
 // TestTemplatesParse verifies every embedded template parses without error

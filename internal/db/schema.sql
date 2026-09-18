@@ -1,4 +1,4 @@
--- IPGrab schema. Applied idempotently on startup.
+-- Netra schema. Applied idempotently on startup.
 
 CREATE TABLE IF NOT EXISTS admin (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

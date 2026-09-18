@@ -58,7 +58,7 @@ func Load() *Config {
 }
 
 // DBPath returns the full path to the sqlite database file.
-func (c *Config) DBPath() string { return filepath.Join(c.DataDir, "ipgrab.db") }
+func (c *Config) DBPath() string { return filepath.Join(c.DataDir, "netra.db") }
 
 // UploadsDir returns the directory where custom pixel images are stored.
 func (c *Config) UploadsDir() string { return filepath.Join(c.DataDir, "uploads") }

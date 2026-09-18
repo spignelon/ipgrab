@@ -1,5 +1,5 @@
 // Package e2e drives the whole application through real HTTP requests
-// against an httptest.Server — the same route table cmd/ipgrab/main.go
+// against an httptest.Server — the same route table cmd/netra/main.go
 // builds (via internal/app.NewMux), backed by a real (temp-file) sqlite
 // database. Nothing here mocks internal packages: auth, CSRF, sessions,
 // the DB, and the live-proxy clone engine (against local httptest "target"
@@ -20,12 +20,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spignelon/ipgrab/internal/app"
-	"github.com/spignelon/ipgrab/internal/auth"
-	"github.com/spignelon/ipgrab/internal/config"
-	"github.com/spignelon/ipgrab/internal/db"
-	"github.com/spignelon/ipgrab/internal/geoip"
-	"github.com/spignelon/ipgrab/internal/handlers"
+	"github.com/spignelon/netra/internal/app"
+	"github.com/spignelon/netra/internal/auth"
+	"github.com/spignelon/netra/internal/config"
+	"github.com/spignelon/netra/internal/db"
+	"github.com/spignelon/netra/internal/geoip"
+	"github.com/spignelon/netra/internal/handlers"
 )
 
 // testApp bundles a running instance of the whole app for one test.
@@ -34,7 +34,7 @@ type testApp struct {
 	db  *db.DB
 }
 
-// newTestApp builds a fresh IPGrab instance — temp-dir data directory,
+// newTestApp builds a fresh Netra instance — temp-dir data directory,
 // fresh sqlite database, the exact production route table — and returns it
 // wrapped in an httptest.Server. Callers must t.Cleanup or defer Close().
 func newTestApp(t *testing.T) *testApp {
@@ -43,7 +43,7 @@ func newTestApp(t *testing.T) *testApp {
 	dir := t.TempDir()
 	cfg := &config.Config{
 		Port:         "0",
-		BaseURL:      "http://ipgrab.test",
+		BaseURL:      "http://netra.test",
 		DataDir:      dir,
 		SessionKey:   randomKey(t),
 		TrustProxy:   false,
@@ -123,12 +123,12 @@ func (a *testApp) authedClient(t *testing.T) *http.Client {
 	return client
 }
 
-// csrfFromJar reads the ipgrab_csrf cookie value the way an admin template
+// csrfFromJar reads the netra_csrf cookie value the way an admin template
 // would (the cookie is deliberately not HttpOnly for exactly this reason).
 func (a *testApp) csrfFromJar(client *http.Client) string {
 	u, _ := url.Parse(a.srv.URL)
 	for _, c := range client.Jar.Cookies(u) {
-		if c.Name == "ipgrab_csrf" {
+		if c.Name == "netra_csrf" {
 			return c.Value
 		}
 	}

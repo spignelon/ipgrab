@@ -16,9 +16,9 @@ import (
 
 	"github.com/skip2/go-qrcode"
 
-	"github.com/spignelon/ipgrab/internal/auth"
-	"github.com/spignelon/ipgrab/internal/db"
-	"github.com/spignelon/ipgrab/internal/models"
+	"github.com/spignelon/netra/internal/auth"
+	"github.com/spignelon/netra/internal/db"
+	"github.com/spignelon/netra/internal/models"
 )
 
 const slugAlphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -228,7 +228,7 @@ func (h *Handler) ToggleGeoIP(w http.ResponseWriter, r *http.Request) {
 // ToggleConceal handles POST /admin/settings/conceal: flips conceal mode,
 // which disguises the login page, dashboard title, and favicon as a generic
 // self-hosted Nextcloud instance so a casual visitor or port scanner can't
-// tell IPGrab is running here. It only changes cosmetics on the admin-facing
+// tell Netra is running here. It only changes cosmetics on the admin-facing
 // surface — the login form still only ever authenticates the one real admin
 // account, and nothing extra is captured or stored about what anyone else
 // types into it.
@@ -637,7 +637,7 @@ func (h *Handler) EventsCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition",
-		fmt.Sprintf(`attachment; filename="ipgrab-events-%s.csv"`, time.Now().Format("20060102-150405")))
+		fmt.Sprintf(`attachment; filename="netra-events-%s.csv"`, time.Now().Format("20060102-150405")))
 
 	cw := csv.NewWriter(w)
 	defer cw.Flush()

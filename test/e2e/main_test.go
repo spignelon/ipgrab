@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/spignelon/ipgrab/internal/netguard"
+	"github.com/spignelon/netra/internal/netguard"
 )
 
 // TestMain flips netguard.AllowPrivateForTesting on for this whole suite,

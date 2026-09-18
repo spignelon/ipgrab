@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spignelon/ipgrab/internal/netguard"
+	"github.com/spignelon/netra/internal/netguard"
 )
 
 // newTargetServer spins up a local HTTP server standing in for a real

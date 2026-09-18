@@ -9,13 +9,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/spignelon/ipgrab/internal/db"
+	"github.com/spignelon/netra/internal/db"
 	"golang.org/x/crypto/bcrypt"
 )
 
 const (
-	sessionCookie = "ipgrab_session"
-	csrfCookie    = "ipgrab_csrf"
+	sessionCookie = "netra_session"
+	csrfCookie    = "netra_csrf"
 	// SessionTTL is how long a login lasts.
 	SessionTTL = 7 * 24 * time.Hour
 )

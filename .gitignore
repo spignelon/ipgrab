@@ -14,8 +14,8 @@ HANDOFF.md
 .env.local
 
 # Compiled binaries.
-/ipgrab
-/ipgrab-*
+/netra
+/netra-*
 *.exe
 *.test
 
