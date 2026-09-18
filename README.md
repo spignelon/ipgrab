@@ -37,19 +37,19 @@ apply to you, your organization, and your targets. The authors accept no liabili
 ## Quick start (Docker)
 
 **Recommended: prebuilt image from GHCR** — no local compile, so a weak/shared-CPU VPS doesn't
-lag building Go:
+lag building Go. No repo clone needed:
 
 ```bash
-curl -O https://raw.githubusercontent.com/spignelon/netra/main/docker-compose.ghcr.yml
-SESSION_SECRET=$(openssl rand -hex 32) BASE_URL=http://YOUR_HOST:8080 \
-  docker compose -f docker-compose.ghcr.yml up -d
+docker run -d --name netra -p 8080:8080 \
+  -e BASE_URL=http://YOUR_HOST:8080 \
+  -e SESSION_SECRET=$(openssl rand -hex 32) \
+  -v netra_data:/data \
+  ghcr.io/spignelon/netra:latest
 ```
 
-That pulls `ghcr.io/spignelon/netra:latest` (the current tagged release). No `git clone`, no
-`.env` file required — pass `SESSION_SECRET`/`BASE_URL`/etc. inline as above, or drop a `.env`
-next to `docker-compose.ghcr.yml` if you'd rather keep them in a file.
-
-**Alternative: build from source**:
+**Alternative: clone the repo and use `docker-compose.yml`** — the same file works either way:
+`docker compose up -d` pulls the prebuilt image above, `docker compose up -d --build` builds
+from source instead:
 
 ```bash
 git clone https://github.com/spignelon/netra.git && cd netra
@@ -57,17 +57,19 @@ cp .env.example .env
 # edit .env — at minimum set BASE_URL and SESSION_SECRET:
 #   openssl rand -hex 32   (paste the output as SESSION_SECRET)
 
-docker compose up -d --build
+docker compose up -d          # pulls ghcr.io/spignelon/netra:latest
+# docker compose up -d --build   # or build from source instead
 ```
 
 Either way, visit `BASE_URL` (e.g. `http://localhost:8080`) — you'll land on `/setup` to create
 the one admin account, then log in at `/login`.
 
-Data persists in the `netra_data` Docker volume across `docker compose down`/`up`. See the
-Wiki's [Quick Start](../../wiki/Quick-Start) page for the full picture: running without Docker,
-behind a reverse proxy, the `:edge` image (built from every `main` commit, ahead of the latest
-release but not guaranteed stable), the full environment-variable reference, [exposing a local
-instance with ngrok](../../wiki/Ngrok-Tunnel), and [running directly on Android via
+Data persists in the `netra_data` Docker volume across `docker compose down`/`up` (or the named
+volume in the `docker run` command above). See the Wiki's [Quick Start](../../wiki/Quick-Start)
+page for the full picture: running without Docker, behind a reverse proxy, the `:edge` image
+(built from every `main` commit, ahead of the latest release but not guaranteed stable), the
+full environment-variable reference, [exposing a local instance with
+ngrok](../../wiki/Ngrok-Tunnel), and [running directly on Android via
 Termux](../../wiki/Termux).
 
 ## What it does

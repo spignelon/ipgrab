@@ -1,7 +1,7 @@
 services:
   netra:
     build: .
-    image: netra:latest
+    image: ghcr.io/spignelon/netra:latest
     restart: unless-stopped
     # No env_file here on purpose: Compose already auto-loads a top-level
     # .env file (if present) to fill in the ${VAR:-default} references
