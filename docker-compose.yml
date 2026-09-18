@@ -3,13 +3,23 @@ services:
     build: .
     image: netra:latest
     restart: unless-stopped
-    env_file: .env
+    # No env_file here on purpose: Compose already auto-loads a top-level
+    # .env file (if present) to fill in the ${VAR:-default} references
+    # below, so the values can come from .env, from a shell-exported var, or
+    # from an inline `VAR=... docker compose up` — whichever is set wins, in
+    # that order (inline/shell > .env > the default shown here). env_file
+    # only ever reads from a literal file, which would silently drop
+    # anything passed via shell/inline instead.
     environment:
-      # Enforced here (not just in .env) so `docker compose up` fails fast
-      # with a clear message if it's missing, instead of silently falling
-      # back to Netra's own ephemeral in-memory secret (which still starts,
-      # just with a warning, and invalidates sessions on every restart).
-      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in your .env file}
+      PORT: ${PORT:-8080}
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # No default: `docker compose up` fails fast with this message if it's
+      # missing, instead of silently falling back to Netra's own ephemeral
+      # in-memory secret (which still starts, just with a warning, and
+      # invalidates sessions on every restart).
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in your .env file, or pass it inline}
     ports:
       - "${PORT:-8080}:${PORT:-8080}"
     volumes:
