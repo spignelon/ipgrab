@@ -36,6 +36,21 @@ apply to you, your organization, and your targets. The authors accept no liabili
 
 ## Quick start (Docker)
 
+**Recommended: prebuilt image from GHCR** — no local compile, so a weak/shared-CPU VPS doesn't
+lag building Go:
+
+```bash
+curl -O https://raw.githubusercontent.com/spignelon/netra/main/docker-compose.ghcr.yml
+SESSION_SECRET=$(openssl rand -hex 32) BASE_URL=http://YOUR_HOST:8080 \
+  docker compose -f docker-compose.ghcr.yml up -d
+```
+
+That pulls `ghcr.io/spignelon/netra:latest` (the current tagged release). No `git clone`, no
+`.env` file required — pass `SESSION_SECRET`/`BASE_URL`/etc. inline as above, or drop a `.env`
+next to `docker-compose.ghcr.yml` if you'd rather keep them in a file.
+
+**Alternative: build from source**:
+
 ```bash
 git clone https://github.com/spignelon/netra.git && cd netra
 cp .env.example .env
@@ -45,13 +60,15 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Visit `BASE_URL` (e.g. `http://localhost:8080`) — you'll land on `/setup` to create the one
-admin account, then log in at `/login`.
+Either way, visit `BASE_URL` (e.g. `http://localhost:8080`) — you'll land on `/setup` to create
+the one admin account, then log in at `/login`.
 
 Data persists in the `netra_data` Docker volume across `docker compose down`/`up`. See the
-Wiki's [Quick Start](../../wiki/Quick-Start) page for running without Docker, behind a reverse
-proxy, and the full environment-variable reference — including [exposing a local instance with
-ngrok](../../wiki/Ngrok-Tunnel) and [running directly on Android via Termux](../../wiki/Termux).
+Wiki's [Quick Start](../../wiki/Quick-Start) page for the full picture: running without Docker,
+behind a reverse proxy, the `:edge` image (built from every `main` commit, ahead of the latest
+release but not guaranteed stable), the full environment-variable reference, [exposing a local
+instance with ngrok](../../wiki/Ngrok-Tunnel), and [running directly on Android via
+Termux](../../wiki/Termux).
 
 ## What it does
 

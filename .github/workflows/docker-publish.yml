@@ -10,6 +10,11 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+    # Doc-only commits shouldn't trigger a full multi-arch rebuild+publish.
+    # GitHub doesn't evaluate paths-ignore for tag pushes, only branches, so
+    # this only affects the :edge (main) trigger, not releases.
+    paths-ignore:
+      - "**.md"
 
 permissions:
   contents: read
