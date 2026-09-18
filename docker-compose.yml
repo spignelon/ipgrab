@@ -3,15 +3,15 @@ services:
     build: .
     image: netra:latest
     restart: unless-stopped
-    ports:
-      - "${PORT:-8080}:8080"
+    env_file: .env
     environment:
-      PORT: 8080
-      BASE_URL: ${BASE_URL:-http://localhost:8080}
-      DATA_DIR: /data
+      # Enforced here (not just in .env) so `docker compose up` fails fast
+      # with a clear message if it's missing, instead of silently falling
+      # back to Netra's own ephemeral in-memory secret (which still starts,
+      # just with a warning, and invalidates sessions on every restart).
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in your .env file}
-      TRUST_PROXY: ${TRUST_PROXY:-false}
-      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
     volumes:
       - netra_data:/data
 
