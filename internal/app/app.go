@@ -53,6 +53,7 @@ func NewMux(h *handlers.Handler, am *auth.Manager) http.Handler {
 	// Admin (guarded).
 	mux.HandleFunc("GET /admin", am.RequireAuth(h.Dashboard))
 	mux.HandleFunc("GET /admin/links", am.RequireAuth(h.LinksList))
+	mux.HandleFunc("GET /admin/api/links", am.RequireAuth(h.LinksAPI))
 	mux.HandleFunc("POST /admin/links", am.RequireAuth(h.CreateLink))
 	mux.HandleFunc("GET /admin/links/{id}", am.RequireAuth(h.LinkDetail))
 	mux.HandleFunc("GET /admin/links/{id}/qr.png", am.RequireAuth(h.LinkQR))
@@ -69,6 +70,7 @@ func NewMux(h *handlers.Handler, am *auth.Manager) http.Handler {
 	mux.HandleFunc("POST /admin/settings/webhook", am.RequireAuth(h.SaveWebhook))
 	mux.HandleFunc("POST /admin/settings/webhook/test", am.RequireAuth(h.TestWebhook))
 	mux.HandleFunc("POST /admin/settings/geoip", am.RequireAuth(h.ToggleGeoIP))
+	mux.HandleFunc("POST /admin/settings/refresh", am.RequireAuth(h.SaveAutoRefresh))
 
 	// Root: send to dashboard (or setup/login as appropriate).
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {

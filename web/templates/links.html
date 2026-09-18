@@ -108,7 +108,7 @@
           </thead>
           <tbody>
             {{range .Links}}
-            <tr>
+            <tr data-id="{{.ID}}">
               <td class="select-cell"><input type="checkbox" name="ids" value="{{.ID}}" form="linksBulkForm" class="link-select"></td>
               <td><a href="/admin/links/{{.ID}}">{{linkName .}}</a></td>
               <td><span class="badge">{{typeBadge .Type}}</span></td>
@@ -123,9 +123,9 @@
                   </svg>
                 </button>
               </td>
-              <td>{{.EventCount}}</td>
-              <td>{{if .LastEvent}}{{since .LastEvent}}{{else}}<span class="muted">never</span>{{end}}</td>
-              <td>
+              <td class="link-events-cell">{{.EventCount}}</td>
+              <td class="link-lastactivity-cell">{{if .LastEvent}}{{since .LastEvent}}{{else}}<span class="muted">never</span>{{end}}</td>
+              <td class="link-status-cell">
                 {{if .Expired}}<span class="pill pill-off">Expired</span>
                 {{else if .Active}}<span class="pill pill-on">Active</span>
                 {{else}}<span class="pill pill-off">Disabled</span>{{end}}
@@ -158,6 +158,7 @@
     </div>
   </div>
 
+  <script src="/static/autorefresh.js"></script>
   <script src="/static/links.js"></script>
 </body>
 </html>

@@ -5,10 +5,48 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 )
+
+// TestAutoRefreshSetting exercises the auto-refresh interval end to end:
+// defaults to 30s, persists a valid value, is embedded into the page for
+// the frontend polling scripts to read, and clamps an out-of-range value
+// server-side rather than trusting whatever the form sends.
+func TestAutoRefreshSetting(t *testing.T) {
+	a := newTestApp(t)
+	client := a.authedClient(t)
+
+	settings := bodyString(t, a.get(t, client, "/admin/settings"))
+	if !strings.Contains(settings, `value="30"`) {
+		t.Fatalf("expected default auto-refresh interval of 30s in settings page, got: %s", settings)
+	}
+
+	csrf := a.csrfFromJar(client)
+	a.postForm(t, client, "/admin/settings/refresh", url.Values{"auto_refresh_seconds": {"45"}, "csrf_token": {csrf}}).Body.Close()
+
+	settings = bodyString(t, a.get(t, client, "/admin/settings"))
+	if !strings.Contains(settings, `value="45"`) {
+		t.Fatalf("expected auto-refresh interval to persist as 45s, got: %s", settings)
+	}
+
+	dashboard := bodyString(t, a.get(t, client, "/admin"))
+	// html/template defensively pads JS-context interpolations with spaces
+	// (e.g. "= 45 ;" rather than "=45;") to avoid ambiguous token merging —
+	// match loosely rather than asserting exact spacing.
+	if !regexp.MustCompile(`AUTO_REFRESH_SECONDS\s*=\s*45\s*;`).MatchString(dashboard) {
+		t.Fatalf("expected dashboard to embed AUTO_REFRESH_SECONDS=45 for the frontend poller, got: %s", dashboard)
+	}
+
+	// Out-of-range values are clamped server-side, not trusted as-is.
+	a.postForm(t, client, "/admin/settings/refresh", url.Values{"auto_refresh_seconds": {"99999"}, "csrf_token": {csrf}}).Body.Close()
+	settings = bodyString(t, a.get(t, client, "/admin/settings"))
+	if !strings.Contains(settings, `value="3600"`) {
+		t.Fatalf("expected an out-of-range interval to clamp to the 3600s max, got: %s", settings)
+	}
+}
 
 // TestConcealModeToggle exercises the conceal-mode setting end to end: it
 // starts off, flips on (nav labels + login page change), then off again.

@@ -73,3 +73,51 @@
     if (e.key === "Escape" && !modal.hidden) close();
   });
 })();
+
+// Auto-refresh: keeps each row's event count, last-activity time, and
+// active/expired status current without a page reload. Updates cells in
+// place rather than re-rendering rows, so in-progress checkbox selections
+// (and the toggle/delete forms' own state) survive a refresh tick.
+// Only runs on the Links list page (link_detail.html reuses this file for
+// its QR modal but has no links table of its own).
+(function () {
+  if (!document.getElementById("linksSelectAll")) return;
+  if (!window.Netra || !window.Netra.onAutoRefresh) return;
+
+  function timeAgo(iso) {
+    const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + "m ago";
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return hours + "h ago";
+    return Math.floor(hours / 24) + "d ago";
+  }
+
+  window.Netra.onAutoRefresh(function () {
+    fetch("/admin/api/links")
+      .then((r) => r.json())
+      .then((rows) => {
+        rows.forEach((row) => {
+          const tr = document.querySelector('tr[data-id="' + row.id + '"]');
+          if (!tr) return;
+          const eventsCell = tr.querySelector(".link-events-cell");
+          if (eventsCell) eventsCell.textContent = row.event_count;
+          const lastCell = tr.querySelector(".link-lastactivity-cell");
+          if (lastCell) {
+            lastCell.innerHTML = row.last_event
+              ? timeAgo(row.last_event)
+              : '<span class="muted">never</span>';
+          }
+          const statusCell = tr.querySelector(".link-status-cell");
+          if (statusCell) {
+            statusCell.innerHTML = row.expired
+              ? '<span class="pill pill-off">Expired</span>'
+              : row.active
+              ? '<span class="pill pill-on">Active</span>'
+              : '<span class="pill pill-off">Disabled</span>';
+          }
+        });
+      })
+      .catch(() => {});
+  });
+})();

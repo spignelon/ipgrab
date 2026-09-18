@@ -1,5 +1,8 @@
 // Renders the dashboard Chart.js graphs from the `stats` object embedded by
-// the server-side template (see dashboard.html).
+// the server-side template (see dashboard.html), then keeps the stat cards,
+// charts, and recent-events table current via periodic polling
+// (window.Netra.onAutoRefresh, see autorefresh.js) instead of requiring a
+// manual page reload to see a new click/view/GPS capture show up.
 (function () {
   if (typeof Chart === "undefined" || typeof stats === "undefined") return;
 
@@ -8,9 +11,17 @@
   function labels(buckets) { return (buckets || []).map((b) => b.label); }
   function counts(buckets) { return (buckets || []).map((b) => b.count); }
 
+  function esc(s) {
+    const d = document.createElement("div");
+    d.textContent = s == null ? "" : String(s);
+    return d.innerHTML;
+  }
+
+  let timeChart, countryChart, deviceChart, browserChart;
+
   const timeCtx = document.getElementById("chartTime");
   if (timeCtx) {
-    new Chart(timeCtx, {
+    timeChart = new Chart(timeCtx, {
       type: "line",
       data: {
         labels: labels(stats.events_by_day),
@@ -29,7 +40,7 @@
 
   const countryCtx = document.getElementById("chartCountry");
   if (countryCtx) {
-    new Chart(countryCtx, {
+    countryChart = new Chart(countryCtx, {
       type: "bar",
       data: {
         labels: labels(stats.by_country),
@@ -41,7 +52,7 @@
 
   const deviceCtx = document.getElementById("chartDevice");
   if (deviceCtx) {
-    new Chart(deviceCtx, {
+    deviceChart = new Chart(deviceCtx, {
       type: "doughnut",
       data: {
         labels: labels(stats.by_device),
@@ -52,12 +63,81 @@
 
   const browserCtx = document.getElementById("chartBrowser");
   if (browserCtx) {
-    new Chart(browserCtx, {
+    browserChart = new Chart(browserCtx, {
       type: "doughnut",
       data: {
         labels: labels(stats.by_browser),
         datasets: [{ data: counts(stats.by_browser), backgroundColor: palette }],
       },
+    });
+  }
+
+  function updateChart(chart, buckets) {
+    if (!chart) return;
+    chart.data.labels = labels(buckets);
+    chart.data.datasets[0].data = counts(buckets);
+    chart.update();
+  }
+
+  function refreshStats() {
+    fetch("/admin/api/stats")
+      .then((r) => r.json())
+      .then((s) => {
+        const links = document.getElementById("statTotalLinks");
+        const events = document.getElementById("statTotalEvents");
+        const gps = document.getElementById("statGPSCaptures");
+        const ips = document.getElementById("statUniqueIPs");
+        if (links) links.textContent = s.total_links;
+        if (events) events.textContent = s.total_events;
+        if (gps) gps.textContent = s.gps_captures;
+        if (ips) ips.textContent = s.unique_ips;
+        updateChart(timeChart, s.events_by_day);
+        updateChart(countryChart, s.by_country);
+        updateChart(deviceChart, s.by_device);
+        updateChart(browserChart, s.by_browser);
+      })
+      .catch(() => {});
+  }
+
+  function recentRowHTML(e) {
+    const loc = [e.City, e.Country].filter(Boolean).join(", ");
+    return (
+      "<tr>" +
+      "<td>" + esc(new Date(e.Timestamp).toLocaleString()) + "</td>" +
+      "<td><a href=\"/admin/links/" + e.LinkID + "\">" + esc(e.LinkLabel || e.LinkSlug) + "</a></td>" +
+      "<td><span class=\"badge\">" + esc(e.Type) + "</span></td>" +
+      "<td>" + esc(e.IP) + "</td>" +
+      "<td>" + esc(loc) + "</td>" +
+      "<td>" + esc(e.Device) + " / " + esc(e.OS) + " / " + esc(e.Browser) + "</td>" +
+      "</tr>"
+    );
+  }
+
+  function refreshRecent() {
+    fetch("/admin/api/events?offset=0")
+      .then((r) => r.json())
+      .then((data) => {
+        const events = (data.events || []).slice(0, 15);
+        const wrap = document.getElementById("recentEventsWrap");
+        const empty = document.getElementById("recentEventsEmpty");
+        const body = document.getElementById("recentEventsBody");
+        if (!wrap || !empty || !body) return;
+        if (events.length === 0) {
+          wrap.hidden = true;
+          empty.hidden = false;
+          return;
+        }
+        wrap.hidden = false;
+        empty.hidden = true;
+        body.innerHTML = events.map(recentRowHTML).join("");
+      })
+      .catch(() => {});
+  }
+
+  if (window.Netra && window.Netra.onAutoRefresh) {
+    window.Netra.onAutoRefresh(function () {
+      refreshStats();
+      refreshRecent();
     });
   }
 })();

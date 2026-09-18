@@ -49,9 +49,9 @@
     </section>
 
     <section class="stat-row">
-      <div class="stat-card"><span class="stat-num">{{.Stats.TotalEvents}}</span><span class="stat-label">Events</span></div>
-      <div class="stat-card"><span class="stat-num">{{.Stats.GPSCaptures}}</span><span class="stat-label">GPS Captures</span></div>
-      <div class="stat-card"><span class="stat-num">{{.Stats.UniqueIPs}}</span><span class="stat-label">Unique IPs</span></div>
+      <div class="stat-card"><span class="stat-num" id="statEvents">{{.Stats.TotalEvents}}</span><span class="stat-label">Events</span></div>
+      <div class="stat-card"><span class="stat-num" id="statGPSCaptures">{{.Stats.GPSCaptures}}</span><span class="stat-label">GPS Captures</span></div>
+      <div class="stat-card"><span class="stat-num" id="statUniqueIPs">{{.Stats.UniqueIPs}}</span><span class="stat-label">Unique IPs</span></div>
       <div class="stat-card"><span class="stat-num">{{if .TimeToFirst}}{{.TimeToFirst}}{{else}}—{{end}}</span><span class="stat-label">Time to first hit</span></div>
     </section>
 
@@ -105,8 +105,31 @@
     const points = {{toJSON .Points}};
   </script>
   <script src="/static/link_map.js"></script>
+  <script src="/static/autorefresh.js"></script>
   <script src="/static/events.js"></script>
   <script src="/static/links.js"></script>
+  <script>
+    // Keep this link's own stat cards current without a page reload — the
+    // event log below (events.js) and the map (link_map.js) refresh
+    // themselves independently.
+    (function () {
+      if (!window.Netra || !window.Netra.onAutoRefresh) return;
+      const linkID = {{.Link.ID}};
+      window.Netra.onAutoRefresh(function () {
+        fetch("/admin/api/stats?link=" + linkID)
+          .then((r) => r.json())
+          .then((stats) => {
+            const events = document.getElementById("statEvents");
+            const gps = document.getElementById("statGPSCaptures");
+            const ips = document.getElementById("statUniqueIPs");
+            if (events) events.textContent = stats.total_events;
+            if (gps) gps.textContent = stats.gps_captures;
+            if (ips) ips.textContent = stats.unique_ips;
+          })
+          .catch(() => {});
+      });
+    })();
+  </script>
 </body>
 </html>
 {{end}}

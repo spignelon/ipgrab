@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -85,7 +86,44 @@ const (
 	settingWebhookAuthPass  = "webhook_auth_pass"
 	settingGPSAlertEnabled  = "gps_alert_enabled"
 	settingGPSAlertPriority = "gps_alert_priority"
+	settingAutoRefreshSecs  = "auto_refresh_seconds"
 )
+
+// Admin-UI auto-refresh interval bounds and default (seconds). Below the
+// minimum risks hammering the DB from an idle browser tab; above the
+// maximum defeats the point of "auto" refresh.
+const (
+	DefaultAutoRefreshSeconds = 30
+	MinAutoRefreshSeconds     = 5
+	MaxAutoRefreshSeconds     = 3600
+)
+
+// AutoRefreshSeconds returns how often the admin dashboard/events/links
+// pages should re-poll their JSON APIs for new data, defaulting to
+// DefaultAutoRefreshSeconds until changed from Settings.
+func (db *DB) AutoRefreshSeconds() (int, error) {
+	v, ok, err := db.GetSetting(settingAutoRefreshSecs)
+	if err != nil || !ok {
+		return DefaultAutoRefreshSeconds, err
+	}
+	n, convErr := strconv.Atoi(v)
+	if convErr != nil || n < MinAutoRefreshSeconds || n > MaxAutoRefreshSeconds {
+		return DefaultAutoRefreshSeconds, nil
+	}
+	return n, nil
+}
+
+// SetAutoRefreshSeconds persists the auto-refresh interval, clamped to
+// [MinAutoRefreshSeconds, MaxAutoRefreshSeconds].
+func (db *DB) SetAutoRefreshSeconds(n int) error {
+	if n < MinAutoRefreshSeconds {
+		n = MinAutoRefreshSeconds
+	}
+	if n > MaxAutoRefreshSeconds {
+		n = MaxAutoRefreshSeconds
+	}
+	return db.SetSetting(settingAutoRefreshSecs, strconv.Itoa(n))
+}
 
 // GeoIPEnabled reports whether IP geolocation lookups are enabled. Defaults
 // to true (enabled) until explicitly turned off from Settings.

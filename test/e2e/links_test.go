@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"bytes"
+	"encoding/json"
 	"image/png"
 	"net/http"
 	"net/url"
@@ -138,6 +139,75 @@ func TestBulkDeleteLinks(t *testing.T) {
 	}
 }
 
+// TestLinksAPILiveCounters is the regression test for the Links page's
+// auto-refresh: /admin/api/links must reflect a new hit's event count and
+// active state without requiring a page reload, matching what /admin/links
+// itself would show.
+func TestLinksAPILiveCounters(t *testing.T) {
+	a := newTestApp(t)
+	client := a.authedClient(t)
+
+	a.createLink(t, client, url.Values{"type": {"redirect"}, "slug": {"apitest"}, "destination": {"https://example.com"}}).Body.Close()
+	id := a.linkIDBySlug(t, client, "apitest")
+
+	resp := a.get(t, client, "/admin/api/links")
+	defer resp.Body.Close()
+	var rows []struct {
+		ID         int64  `json:"id"`
+		EventCount int    `json:"event_count"`
+		LastEvent  string `json:"last_event"`
+		Active     bool   `json:"active"`
+		Expired    bool   `json:"expired"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		t.Fatalf("decode /admin/api/links: %v", err)
+	}
+	var before *struct {
+		ID         int64  `json:"id"`
+		EventCount int    `json:"event_count"`
+		LastEvent  string `json:"last_event"`
+		Active     bool   `json:"active"`
+		Expired    bool   `json:"expired"`
+	}
+	for i := range rows {
+		if rows[i].ID == id {
+			before = &rows[i]
+		}
+	}
+	if before == nil {
+		t.Fatalf("link id %d missing from /admin/api/links response", id)
+	}
+	if before.EventCount != 0 || before.LastEvent != "" || !before.Active {
+		t.Fatalf("unexpected initial state for a fresh link: %+v", before)
+	}
+
+	anon := noRedirectClient(&http.Client{Jar: client.Jar})
+	a.get(t, anon, "/s/apitest").Body.Close()
+
+	resp2 := a.get(t, client, "/admin/api/links")
+	defer resp2.Body.Close()
+	rows = nil
+	if err := json.NewDecoder(resp2.Body).Decode(&rows); err != nil {
+		t.Fatalf("decode /admin/api/links after hit: %v", err)
+	}
+	found := false
+	for _, row := range rows {
+		if row.ID != id {
+			continue
+		}
+		found = true
+		if row.EventCount != 1 {
+			t.Errorf("expected event_count=1 after one hit, got %d", row.EventCount)
+		}
+		if row.LastEvent == "" {
+			t.Error("expected last_event to be set after a hit, got empty")
+		}
+	}
+	if !found {
+		t.Fatalf("link id %d missing from /admin/api/links after hit", id)
+	}
+}
+
 func TestQRCodeIsValidPNG(t *testing.T) {
 	a := newTestApp(t)
 	client := a.authedClient(t)
@@ -196,7 +266,9 @@ func TestMaxClicksExpiry(t *testing.T) {
 func (a *testApp) linkIDBySlug(t *testing.T, client *http.Client, slug string) int64 {
 	t.Helper()
 	body := bodyString(t, a.get(t, client, "/admin/links"))
-	for _, row := range strings.Split(body, "<tr>") {
+	// Split on "<tr" (not "<tr>") so this stays correct regardless of
+	// attributes on the row tag (e.g. the data-id added for auto-refresh).
+	for _, row := range strings.Split(body, "<tr") {
 		if !strings.Contains(row, "/"+slug+"\"") && !strings.Contains(row, "/"+slug+"<") {
 			continue
 		}

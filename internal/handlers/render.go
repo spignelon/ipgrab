@@ -38,6 +38,11 @@ type Handler struct {
 	// ip-api.com lookup on every hit without a DB round trip.
 	geoipEnabled atomic.Bool
 
+	// autoRefreshSeconds caches the admin-UI polling interval (dashboard,
+	// events log, links list), so every render() call can inject it into
+	// templates without a DB round trip. Kept in sync via SetAutoRefreshSeconds.
+	autoRefreshSeconds atomic.Int32
+
 	// notifyMu guards notifyCfg, refreshed whenever the webhook/GPS-alert
 	// settings are saved from the admin Settings page.
 	notifyMu  sync.RWMutex
@@ -104,6 +109,12 @@ func New(database *db.DB, cfg *config.Config, am *auth.Manager, geo *geoip.Clien
 	} else {
 		h.geoipEnabled.Store(enabled)
 	}
+	if secs, err := database.AutoRefreshSeconds(); err != nil {
+		log.Printf("WARNING: could not load auto-refresh setting, defaulting to %ds: %v", db.DefaultAutoRefreshSeconds, err)
+		h.autoRefreshSeconds.Store(db.DefaultAutoRefreshSeconds)
+	} else {
+		h.autoRefreshSeconds.Store(int32(secs))
+	}
 	h.reloadNotifyConfig()
 	return h, nil
 }
@@ -114,6 +125,13 @@ func (h *Handler) GeoIPEnabled() bool { return h.geoipEnabled.Load() }
 // SetGeoIPEnabled updates the in-memory GeoIP toggle cache. Call this right
 // after persisting the new value with DB.SetGeoIPEnabled.
 func (h *Handler) SetGeoIPEnabled(v bool) { h.geoipEnabled.Store(v) }
+
+// AutoRefreshSeconds returns the current admin-UI polling interval.
+func (h *Handler) AutoRefreshSeconds() int { return int(h.autoRefreshSeconds.Load()) }
+
+// SetAutoRefreshSeconds updates the in-memory auto-refresh cache. Call this
+// right after persisting the new value with DB.SetAutoRefreshSeconds.
+func (h *Handler) SetAutoRefreshSeconds(v int) { h.autoRefreshSeconds.Store(int32(v)) }
 
 // NotifyConfig returns a snapshot of the current webhook/GPS-alert settings.
 func (h *Handler) NotifyConfig() notify.Config {
@@ -171,6 +189,9 @@ func (h *Handler) render(w http.ResponseWriter, name string, data map[string]any
 	}
 	if _, ok := data["Concealed"]; !ok {
 		data["Concealed"] = h.Concealed()
+	}
+	if _, ok := data["AutoRefreshSeconds"]; !ok {
+		data["AutoRefreshSeconds"] = h.AutoRefreshSeconds()
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.tmpl.ExecuteTemplate(w, name, data); err != nil {

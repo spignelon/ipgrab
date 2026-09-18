@@ -16,6 +16,21 @@
     {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
 
     <section class="card">
+      <h3>Auto-refresh</h3>
+      <p class="muted">
+        How often the Dashboard, Events log, and Links list re-poll for new data in the
+        background, so a new click/view/GPS capture shows up without reloading the page.
+      </p>
+      <form method="post" action="/admin/settings/refresh" class="settings-form">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <label>Interval (seconds)
+          <input type="number" name="auto_refresh_seconds" value="{{.AutoRefreshSeconds}}" min="5" max="3600" required>
+        </label>
+        <button type="submit" class="btn btn-primary">Save interval</button>
+      </form>
+    </section>
+
+    <section class="card">
       <h3>GeoIP lookups</h3>
       <p class="muted">
         Enriches every captured event with country/region/city and ISP/org/ASN by looking up the

@@ -246,6 +246,34 @@ func (h *Handler) ToggleConceal(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
 }
 
+// SaveAutoRefresh handles POST /admin/settings/refresh: persists how often
+// (in seconds) the dashboard/events/links pages should re-poll their JSON
+// APIs for new data. Clamped server-side to a sane range regardless of what
+// the form sends (see db.MinAutoRefreshSeconds/MaxAutoRefreshSeconds).
+func (h *Handler) SaveAutoRefresh(w http.ResponseWriter, r *http.Request) {
+	if !auth.VerifyCSRF(r) {
+		http.Error(w, "invalid csrf token", http.StatusForbidden)
+		return
+	}
+	secs, err := strconv.Atoi(strings.TrimSpace(r.FormValue("auto_refresh_seconds")))
+	if err != nil {
+		secs = db.DefaultAutoRefreshSeconds
+	}
+	if err := h.DB.SetAutoRefreshSeconds(secs); err != nil {
+		internalError(w, "settings: save auto-refresh interval", err)
+		return
+	}
+	// Re-read so the in-memory cache reflects the actual clamped value, not
+	// whatever out-of-range number the form happened to submit.
+	saved, err := h.DB.AutoRefreshSeconds()
+	if err != nil {
+		internalError(w, "settings: reload auto-refresh interval", err)
+		return
+	}
+	h.SetAutoRefreshSeconds(saved)
+	http.Redirect(w, r, "/admin/settings?notice=Auto-refresh+interval+saved", http.StatusSeeOther)
+}
+
 // ---- Dashboard ----
 
 // Dashboard handles GET /admin.
@@ -287,6 +315,40 @@ func (h *Handler) LinksList(w http.ResponseWriter, r *http.Request) {
 		"BaseURL": h.Cfg.BaseURL,
 		"Error":   r.URL.Query().Get("err"),
 	})
+}
+
+// linkLiveRow is the per-link payload LinksAPI returns: just the fields that
+// can go stale between page loads (event count, last-activity time, active/
+// expired state), not a full link — the Links page updates these in place
+// rather than re-rendering whole rows, which would lose in-progress
+// checkbox selections.
+type linkLiveRow struct {
+	ID         int64  `json:"id"`
+	EventCount int    `json:"event_count"`
+	LastEvent  string `json:"last_event,omitempty"`
+	Active     bool   `json:"active"`
+	Expired    bool   `json:"expired"`
+}
+
+// LinksAPI handles GET /admin/api/links, used by the Links page's
+// auto-refresh to keep event counts/last-activity/status current without a
+// full page reload.
+func (h *Handler) LinksAPI(w http.ResponseWriter, r *http.Request) {
+	links, err := h.DB.ListLinks()
+	if err != nil {
+		internalError(w, "links api: query", err)
+		return
+	}
+	out := make([]linkLiveRow, 0, len(links))
+	for _, l := range links {
+		row := linkLiveRow{ID: l.ID, EventCount: l.EventCount, Active: l.Active, Expired: h.linkExpired(l)}
+		if l.LastEvent != nil {
+			row.LastEvent = l.LastEvent.Format(time.RFC3339)
+		}
+		out = append(out, row)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 // CreateLink handles POST /admin/links.

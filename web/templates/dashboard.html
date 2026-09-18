@@ -15,19 +15,19 @@
 
     <section class="stat-row">
       <div class="stat-card">
-        <span class="stat-num">{{.Stats.TotalLinks}}</span>
+        <span class="stat-num" id="statTotalLinks">{{.Stats.TotalLinks}}</span>
         <span class="stat-label">Links</span>
       </div>
       <div class="stat-card">
-        <span class="stat-num">{{.Stats.TotalEvents}}</span>
+        <span class="stat-num" id="statTotalEvents">{{.Stats.TotalEvents}}</span>
         <span class="stat-label">Total Events</span>
       </div>
       <div class="stat-card">
-        <span class="stat-num">{{.Stats.GPSCaptures}}</span>
+        <span class="stat-num" id="statGPSCaptures">{{.Stats.GPSCaptures}}</span>
         <span class="stat-label">GPS Captures</span>
       </div>
       <div class="stat-card">
-        <span class="stat-num">{{.Stats.UniqueIPs}}</span>
+        <span class="stat-num" id="statUniqueIPs">{{.Stats.UniqueIPs}}</span>
         <span class="stat-label">Unique IPs</span>
       </div>
     </section>
@@ -56,15 +56,13 @@
         <h3>Recent events</h3>
         <a href="/admin/events" class="btn btn-ghost btn-sm">View all events &rarr;</a>
       </div>
-      {{if not .Recent}}
-        <p class="muted">No events captured yet. Create a link and share it to start logging.</p>
-      {{else}}
-      <div class="table-wrap">
+      <p class="muted" id="recentEventsEmpty" {{if .Recent}}hidden{{end}}>No events captured yet. Create a link and share it to start logging.</p>
+      <div class="table-wrap" id="recentEventsWrap" {{if not .Recent}}hidden{{end}}>
         <table>
           <thead>
             <tr><th>Time</th><th>Link</th><th>Type</th><th>IP</th><th>Location</th><th>Device</th></tr>
           </thead>
-          <tbody>
+          <tbody id="recentEventsBody">
             {{range .Recent}}
             <tr>
               <td>{{fmtTime .Timestamp}}</td>
@@ -78,7 +76,6 @@
           </tbody>
         </table>
       </div>
-      {{end}}
     </section>
   </main>
 
@@ -86,6 +83,7 @@
   <script>
     const stats = {{toJSON .Stats}};
   </script>
+  <script src="/static/autorefresh.js"></script>
   <script src="/static/dashboard.js"></script>
 </body>
 </html>

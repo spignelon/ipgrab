@@ -28,6 +28,7 @@
   let loading = false;
   let hasMore = true;
   let requestSeq = 0;
+  let initialLoadDone = false;
   const eventsById = new Map();
 
   function esc(s) {
@@ -104,6 +105,7 @@
         offset += events.length;
         hasMore = !!data.has_more;
         status.textContent = hasMore ? "" : (offset === 0 ? "" : "End of results.");
+        initialLoadDone = true;
       })
       .catch(() => {
         status.textContent = "Could not load events.";
@@ -111,6 +113,42 @@
       .finally(() => {
         loading = false;
       });
+  }
+
+  // Auto-refresh: check for events newer than what's already loaded and
+  // prepend just those (the API's default order is newest-first, so a fresh
+  // offset=0 fetch always has any new rows at the top). Bumps `offset` by
+  // however many rows were prepended, so a later scroll-triggered load()
+  // still fetches the correct next page instead of re-fetching/duplicating
+  // rows that shifted down.
+  function refreshNew() {
+    if (!initialLoadDone || loading) return;
+    const params = new URLSearchParams();
+    if (linkID) params.set("link", linkID);
+    if (searchInput.value.trim()) params.set("q", searchInput.value.trim());
+    if (typeSelect.value) params.set("type", typeSelect.value);
+    params.set("offset", "0");
+
+    fetch("/admin/api/events?" + params.toString())
+      .then((r) => r.json())
+      .then((data) => {
+        const events = data.events || [];
+        const newOnes = events.filter((e) => !eventsById.has(e.ID));
+        if (newOnes.length === 0) return;
+        // Replace the "No events match" placeholder if that's all there was.
+        if (tbody.children.length === 1 && tbody.querySelector("td.muted")) {
+          tbody.innerHTML = "";
+        }
+        newOnes.forEach((e) => eventsById.set(e.ID, e));
+        tbody.insertAdjacentHTML("afterbegin", newOnes.map(rowHTML).join(""));
+        offset += newOnes.length;
+        document.dispatchEvent(new CustomEvent("netra:new-events", { detail: newOnes }));
+      })
+      .catch(() => {});
+  }
+
+  if (window.Netra && window.Netra.onAutoRefresh) {
+    window.Netra.onAutoRefresh(refreshNew);
   }
 
   function selectedCheckboxes() {
