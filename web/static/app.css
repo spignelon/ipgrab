@@ -207,6 +207,35 @@ input.full-width { width: 100%; }
 }
 .qr-modal-close:hover { color: var(--text); }
 
+/* Event detail popup (events.js) — click any event row to see everything
+   captured for it: headers, geo, device, GPS, and JS-side fingerprint. */
+.event-modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
+  align-items: flex-start; justify-content: center; z-index: 1000;
+  padding: 40px 16px; overflow-y: auto;
+}
+.event-modal[hidden] { display: none; }
+.event-modal-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 24px; position: relative; width: 100%; max-width: 560px;
+}
+.event-modal-card h3 { margin: 0 0 4px; font-size: 16px; }
+.event-modal-close {
+  position: absolute; top: 8px; right: 12px; background: none; border: none;
+  font-size: 22px; line-height: 1; cursor: pointer; color: var(--muted);
+}
+.event-modal-close:hover { color: var(--text); }
+.event-modal-section { margin-top: 16px; }
+.event-modal-section h4 {
+  margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted);
+}
+.event-modal-grid { display: grid; grid-template-columns: 130px 1fr; row-gap: 6px; column-gap: 12px; font-size: 13px; }
+.event-modal-grid dt { color: var(--muted); }
+.event-modal-grid dd { margin: 0; word-break: break-word; }
+.events-row-clickable { cursor: pointer; }
+.events-row-clickable:hover { background: var(--row-hover, rgba(127,127,127,.08)); }
+
 .settings-form h4 { margin: 18px 0 4px; font-size: 14px; }
 .checkbox-label { flex-direction: row !important; align-items: center; gap: 8px !important; font-weight: 400 !important; }
 .checkbox-label input[type="checkbox"] { width: auto; }

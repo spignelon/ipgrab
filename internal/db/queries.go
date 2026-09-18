@@ -433,35 +433,52 @@ func (db *DB) InsertEvent(e *models.Event) (int64, error) {
 	return res.LastInsertId()
 }
 
-// AttachGPS updates an existing event with browser geolocation data.
-// linkID scopes the update to the event actually belonging to that link —
-// without it, any visitor could forge an arbitrary event_id in the POST
-// body and overwrite GPS coordinates on an event belonging to a completely
-// different link.
-func (db *DB) AttachGPS(id, linkID int64, lat, lon, accuracy float64, headersJSON string) error {
-	_, err := db.Exec(`UPDATE events SET type = ?, gps_lat = ?, gps_lon = ?, gps_accuracy = ?, headers_json = ? WHERE id = ? AND link_id = ?`,
-		models.EventGPS, lat, lon, accuracy, headersJSON, id, linkID)
-	return err
-}
-
-// AttachFingerprint merges JS-side fingerprint signals (from the clone
-// live-proxy's beacon) into an existing event's headers_json blob, under a
-// "js_fingerprint" key, preserving whatever was already recorded there.
-// linkID scopes both the read and the write to the event actually belonging
-// to that link — see the identical note on AttachGPS.
-func (db *DB) AttachFingerprint(id, linkID int64, fp map[string]string) error {
+// mergeFingerprint reads an event's current headers_json and returns it with
+// the given JS-side fingerprint signals (timezone, screen size, language,
+// platform) merged in under a "js_fingerprint" key, preserving whatever
+// headers were already recorded there (the request headers captured at
+// initial view time — X-Forwarded-For, Sec-CH-UA, etc.).
+func (db *DB) mergeFingerprint(id, linkID int64, fp map[string]string) (string, error) {
 	var hdr string
 	if err := db.QueryRow(`SELECT headers_json FROM events WHERE id = ? AND link_id = ?`, id, linkID).Scan(&hdr); err != nil {
-		return err
+		return "", err
 	}
 	m := map[string]any{}
 	_ = json.Unmarshal([]byte(hdr), &m) // best-effort; start fresh on malformed data
 	m["js_fingerprint"] = fp
 	b, err := json.Marshal(m)
+	return string(b), err
+}
+
+// AttachGPS updates an existing event with browser geolocation data and
+// merges in the JS-side fingerprint (see mergeFingerprint) rather than
+// overwriting headers_json outright — an earlier version of this method
+// replaced the whole blob with just the fingerprint, silently discarding
+// the request headers captured when the event was first created.
+// linkID scopes the update to the event actually belonging to that link —
+// without it, any visitor could forge an arbitrary event_id in the POST
+// body and overwrite GPS coordinates on an event belonging to a completely
+// different link.
+func (db *DB) AttachGPS(id, linkID int64, lat, lon, accuracy float64, fp map[string]string) error {
+	headersJSON, err := db.mergeFingerprint(id, linkID, fp)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(`UPDATE events SET headers_json = ? WHERE id = ? AND link_id = ?`, string(b), id, linkID)
+	_, err = db.Exec(`UPDATE events SET type = ?, gps_lat = ?, gps_lon = ?, gps_accuracy = ?, headers_json = ? WHERE id = ? AND link_id = ?`,
+		models.EventGPS, lat, lon, accuracy, headersJSON, id, linkID)
+	return err
+}
+
+// AttachFingerprint merges JS-side fingerprint signals (from the clone
+// live-proxy's beacon) into an existing event's headers_json blob — see
+// mergeFingerprint. linkID scopes both the read and the write to the event
+// actually belonging to that link — see the identical note on AttachGPS.
+func (db *DB) AttachFingerprint(id, linkID int64, fp map[string]string) error {
+	headersJSON, err := db.mergeFingerprint(id, linkID, fp)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`UPDATE events SET headers_json = ? WHERE id = ? AND link_id = ?`, headersJSON, id, linkID)
 	return err
 }
 

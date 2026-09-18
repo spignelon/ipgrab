@@ -28,6 +28,7 @@
   let loading = false;
   let hasMore = true;
   let requestSeq = 0;
+  const eventsById = new Map();
 
   function esc(s) {
     const d = document.createElement("div");
@@ -48,7 +49,7 @@
       ? "<td><a href=\"/admin/links/" + e.LinkID + "\">" + esc(e.LinkLabel || ("#" + e.LinkID)) + "</a></td>"
       : "";
     return (
-      "<tr data-id=\"" + e.ID + "\">" +
+      "<tr data-id=\"" + e.ID + "\" class=\"events-row-clickable\">" +
       "<td class=\"select-cell\"><input type=\"checkbox\" class=\"event-select\" value=\"" + e.ID + "\"></td>" +
       "<td class=\"event-delete-cell\"><button type=\"button\" class=\"btn btn-ghost btn-sm event-delete-btn\" data-id=\"" + e.ID + "\" title=\"Delete event\">" + trashIcon + "</button></td>" +
       "<td>" + esc(new Date(e.Timestamp).toLocaleString()) + "</td>" +
@@ -76,6 +77,7 @@
     offset = 0;
     hasMore = true;
     tbody.innerHTML = "";
+    eventsById.clear();
     selectAll.checked = false;
     selectAll.indeterminate = false;
     updateDeleteButton();
@@ -96,6 +98,7 @@
         if (events.length === 0 && offset === 0) {
           tbody.innerHTML = "<tr><td colspan=\"" + totalCols + "\" class=\"muted\">No events match.</td></tr>";
         } else {
+          events.forEach((e) => eventsById.set(e.ID, e));
           tbody.insertAdjacentHTML("beforeend", events.map(rowHTML).join(""));
         }
         offset += events.length;
@@ -185,6 +188,125 @@
         status.textContent = "Could not delete selected events.";
         updateDeleteButton();
       });
+  });
+
+  // Event detail popup: click any row (outside its checkbox/delete button)
+  // to see every field captured for that event, including the raw request
+  // headers and JS-side fingerprint (timezone, screen, language, platform)
+  // that don't otherwise fit in the table's summary columns.
+  function buildEventModal() {
+    const modal = document.createElement("div");
+    modal.className = "event-modal";
+    modal.id = "eventModal";
+    modal.hidden = true;
+    modal.innerHTML =
+      '<div class="event-modal-card">' +
+      '<button type="button" class="event-modal-close" aria-label="Close">&times;</button>' +
+      '<h3 id="eventModalTitle"></h3>' +
+      '<div id="eventModalBody"></div>' +
+      "</div>";
+    document.body.appendChild(modal);
+
+    const close = () => { modal.hidden = true; };
+    modal.querySelector(".event-modal-close").addEventListener("click", close);
+    modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !modal.hidden) close();
+    });
+    return modal;
+  }
+
+  function fieldRow(label, value) {
+    if (value === null || value === undefined || value === "") return "";
+    return "<dt>" + esc(label) + "</dt><dd>" + esc(value) + "</dd>";
+  }
+
+  // Header keys captured server-side at event time (see internal/handlers/
+  // public.go's capture()) — shown separately from the JS-side fingerprint,
+  // which is merged into the same blob under "js_fingerprint" once a GPS or
+  // Clone link's beacon reports back (see internal/db/queries.go).
+  const RAW_HEADER_LABELS = {
+    "X-Forwarded-For": "X-Forwarded-For",
+    "X-Real-IP": "X-Real-IP",
+    "DNT": "Do Not Track",
+    "Sec-CH-UA": "Client Hints (UA)",
+    "Sec-CH-UA-Mobile": "Client Hints (Mobile)",
+    "Sec-CH-UA-Platform": "Client Hints (Platform)",
+  };
+
+  function renderEventModal(e) {
+    const modal = window._eventModal || (window._eventModal = buildEventModal());
+    modal.querySelector("#eventModalTitle").textContent =
+      "Event #" + e.ID + " — " + e.Type;
+
+    let headers = {};
+    try { headers = JSON.parse(e.HeadersJSON || "{}"); } catch (err) { /* malformed/empty */ }
+    const fp = headers.js_fingerprint || null;
+
+    const loc = [e.City, e.Region, e.Country].filter(Boolean).join(", ");
+    const coords = e.Lat || e.Lon ? e.Lat.toFixed(4) + ", " + e.Lon.toFixed(4) : "";
+
+    let html = "";
+
+    html += '<div class="event-modal-section"><h4>Overview</h4><dl class="event-modal-grid">' +
+      fieldRow("Time", new Date(e.Timestamp).toLocaleString()) +
+      (showLinkCol ? fieldRow("Link", (e.LinkLabel || e.LinkSlug || ("#" + e.LinkID))) : "") +
+      fieldRow("Type", e.Type) +
+      "</dl></div>";
+
+    html += '<div class="event-modal-section"><h4>Network &amp; location</h4><dl class="event-modal-grid">' +
+      fieldRow("IP address", e.IP) +
+      fieldRow("Location", loc) +
+      fieldRow("Approx. coordinates", coords) +
+      fieldRow("ISP", e.ISP) +
+      fieldRow("Org", e.Org) +
+      fieldRow("ASN", e.ASN) +
+      fieldRow("Referer", e.Referer) +
+      "</dl></div>";
+
+    html += '<div class="event-modal-section"><h4>Device</h4><dl class="event-modal-grid">' +
+      fieldRow("Device", e.Device) +
+      fieldRow("OS", e.OS) +
+      fieldRow("Browser", e.Browser) +
+      fieldRow("User-Agent", e.UserAgent) +
+      fieldRow("Accept-Language", e.AcceptLanguage) +
+      "</dl></div>";
+
+    if (e.GPSLat != null && e.GPSLon != null) {
+      html += '<div class="event-modal-section"><h4>GPS capture (precise)</h4><dl class="event-modal-grid">' +
+        fieldRow("Latitude", e.GPSLat) +
+        fieldRow("Longitude", e.GPSLon) +
+        fieldRow("Accuracy", e.GPSAccuracy != null ? "±" + Math.round(e.GPSAccuracy) + "m" : "") +
+        "</dl></div>";
+    }
+
+    if (fp) {
+      html += '<div class="event-modal-section"><h4>Browser fingerprint (JS-side)</h4><dl class="event-modal-grid">' +
+        fieldRow("Timezone", fp.tz) +
+        fieldRow("Screen size", fp.screen) +
+        fieldRow("Language", fp.lang) +
+        fieldRow("Platform", fp.platform) +
+        "</dl></div>";
+    }
+
+    const rawRows = Object.keys(RAW_HEADER_LABELS)
+      .map((k) => fieldRow(RAW_HEADER_LABELS[k], headers[k]))
+      .join("");
+    if (rawRows) {
+      html += '<div class="event-modal-section"><h4>Raw request headers</h4><dl class="event-modal-grid">' +
+        rawRows + "</dl></div>";
+    }
+
+    modal.querySelector("#eventModalBody").innerHTML = html;
+    modal.hidden = false;
+  }
+
+  tbody.addEventListener("click", (e) => {
+    if (e.target.closest(".select-cell") || e.target.closest(".event-delete-cell") || e.target.closest("a")) return;
+    const row = e.target.closest("tr[data-id]");
+    if (!row) return;
+    const ev = eventsById.get(Number(row.dataset.id));
+    if (ev) renderEventModal(ev);
   });
 
   let debounceTimer;

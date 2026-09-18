@@ -443,19 +443,18 @@ func (h *Handler) GPSCollect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	fp, _ := json.Marshal(p.Fingerprint)
 	if p.EventID > 0 {
 		// Scoped to this link's own id — without that, a forged event_id in
 		// the POST body could overwrite GPS coordinates on an event
 		// belonging to an entirely different link (see queries.go).
-		if err := h.DB.AttachGPS(p.EventID, link.ID, p.Lat, p.Lon, p.Accuracy, string(fp)); err != nil {
+		if err := h.DB.AttachGPS(p.EventID, link.ID, p.Lat, p.Lon, p.Accuracy, p.Fingerprint); err != nil {
 			log.Printf("gps attach: %v", err)
 		}
 	} else {
 		// No prior event id (edge case): create a fresh GPS event.
 		id := h.capture(r, link, models.EventGPS)
 		if id > 0 {
-			_ = h.DB.AttachGPS(id, link.ID, p.Lat, p.Lon, p.Accuracy, string(fp))
+			_ = h.DB.AttachGPS(id, link.ID, p.Lat, p.Lon, p.Accuracy, p.Fingerprint)
 		}
 	}
 	// A real fix (permission granted) carries non-zero coordinates — the
