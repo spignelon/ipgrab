@@ -186,6 +186,7 @@ input.full-width { width: 100%; }
 .auth-body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
 .auth-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 32px; width: 360px; }
 .auth-card h1 { text-align: center; margin-top: 0; }
+.auth-logo { display: block; margin: 0 auto 12px; height: 44px; width: auto; }
 
 /* QR code popup modal */
 .qr-btn { display: inline-flex; align-items: center; justify-content: center; padding: 6px 10px; }

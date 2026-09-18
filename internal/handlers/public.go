@@ -33,19 +33,23 @@ var transparent1x1PNG = []byte{
 	0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 }
 
-// Favicon handles GET /favicon.ico. Outside conceal mode this behaves exactly
-// as before (no favicon was ever served, so plain 404 — no behavior change).
-// In conceal mode it serves the real Nextcloud favicon (web.ConcealFavicon),
-// covering browsers/crawlers that request /favicon.ico directly regardless
-// of the page's own <link rel="icon"> tag.
+// Favicon handles GET /favicon.ico, covering browsers/crawlers that request
+// it directly regardless of the page's own <link rel="icon"> tag. In conceal
+// mode it serves the real Nextcloud favicon (web.ConcealFavicon); otherwise
+// the real Netra favicon (web/static/favicon.svg).
 func (h *Handler) Favicon(w http.ResponseWriter, r *http.Request) {
+	data := web.ConcealFavicon
 	if !h.Concealed() {
-		http.NotFound(w, r)
-		return
+		b, err := web.Static.ReadFile("static/favicon.svg")
+		if err != nil {
+			internalError(w, "favicon: read embedded asset", err)
+			return
+		}
+		data = b
 	}
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	_, _ = w.Write(web.ConcealFavicon)
+	_, _ = w.Write(data)
 }
 
 // concealAsset writes one embedded conceal-mode asset (real Nextcloud logo,

@@ -1,3 +1,5 @@
+<p align="center"><img src="web/static/logo.svg" alt="Netra" height="90"></p>
+
 # Netra
 
 A self-hosted IP address, device, and location intelligence toolkit for **authorized**
