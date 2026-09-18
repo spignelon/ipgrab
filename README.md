@@ -50,7 +50,8 @@ admin account, then log in at `/login`.
 
 Data persists in the `netra_data` Docker volume across `docker compose down`/`up`. See the
 Wiki's [Quick Start](../../wiki/Quick-Start) page for running without Docker, behind a reverse
-proxy, and the full environment-variable reference.
+proxy, and the full environment-variable reference — including [exposing a local instance with
+ngrok](../../wiki/Ngrok-Tunnel) and [running directly on Android via Termux](../../wiki/Termux).
 
 ## What it does
 
