@@ -274,6 +274,27 @@ func (h *Handler) SaveAutoRefresh(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/settings?notice=Auto-refresh+interval+saved", http.StatusSeeOther)
 }
 
+// SaveTheme handles POST /admin/settings/theme.
+func (h *Handler) SaveTheme(w http.ResponseWriter, r *http.Request) {
+	if !auth.VerifyCSRF(r) {
+		http.Error(w, "invalid csrf token", http.StatusForbidden)
+		return
+	}
+	if err := h.DB.SetThemePreference(r.FormValue("theme")); err != nil {
+		internalError(w, "settings: save theme preference", err)
+		return
+	}
+	// Re-read so the in-memory cache reflects the validated/defaulted value,
+	// not whatever arbitrary string the form happened to submit.
+	saved, err := h.DB.ThemePreference()
+	if err != nil {
+		internalError(w, "settings: reload theme preference", err)
+		return
+	}
+	h.SetTheme(saved)
+	http.Redirect(w, r, "/admin/settings?notice=Appearance+saved", http.StatusSeeOther)
+}
+
 // ---- Dashboard ----
 
 // Dashboard handles GET /admin.

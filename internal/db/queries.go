@@ -87,7 +87,12 @@ const (
 	settingGPSAlertEnabled  = "gps_alert_enabled"
 	settingGPSAlertPriority = "gps_alert_priority"
 	settingAutoRefreshSecs  = "auto_refresh_seconds"
+	settingThemePreference  = "theme_preference"
 )
+
+// DefaultThemePreference is used until changed from Settings; "auto" follows
+// the browser's prefers-color-scheme.
+const DefaultThemePreference = "auto"
 
 // Admin-UI auto-refresh interval bounds and default (seconds). Below the
 // minimum risks hammering the DB from an idle browser tab; above the
@@ -123,6 +128,33 @@ func (db *DB) SetAutoRefreshSeconds(n int) error {
 		n = MaxAutoRefreshSeconds
 	}
 	return db.SetSetting(settingAutoRefreshSecs, strconv.Itoa(n))
+}
+
+// ThemePreference returns "auto", "light", or "dark" — the admin UI's
+// color-scheme preference, defaulting to DefaultThemePreference until
+// changed from Settings.
+func (db *DB) ThemePreference() (string, error) {
+	v, ok, err := db.GetSetting(settingThemePreference)
+	if err != nil || !ok {
+		return DefaultThemePreference, err
+	}
+	switch v {
+	case "auto", "light", "dark":
+		return v, nil
+	default:
+		return DefaultThemePreference, nil
+	}
+}
+
+// SetThemePreference persists the theme preference, falling back to
+// DefaultThemePreference for anything other than "auto"/"light"/"dark".
+func (db *DB) SetThemePreference(v string) error {
+	switch v {
+	case "auto", "light", "dark":
+	default:
+		v = DefaultThemePreference
+	}
+	return db.SetSetting(settingThemePreference, v)
 }
 
 // GeoIPEnabled reports whether IP geolocation lookups are enabled. Defaults

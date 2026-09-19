@@ -1,8 +1,8 @@
 {{define "events.html"}}
 <!doctype html>
-<html lang="en">
+<html lang="en"{{if eq .Theme "light"}} data-theme="light"{{else if eq .Theme "dark"}} data-theme="dark"{{end}}>
 <head>
-  <title>{{if .Concealed}}Activity - Nextcloud{{else}}Events — Netra{{end}}</title>
+  <title>{{if .Concealed}}Events - Nextcloud{{else}}Events — Netra{{end}}</title>
   {{template "head" .}}
 </head>
 <body>
@@ -25,7 +25,7 @@
           </select>
           <button type="button" id="eventsDeleteSelected" class="btn btn-danger btn-sm" disabled>Delete selected</button>
         </div>
-        <p class="muted" style="margin:0 0 8px;font-size:12px;">Click a row to see everything captured for that event.</p>
+        <p class="muted text-xs mb-2">Click a row to see everything captured for that event.</p>
         <div class="table-wrap">
           <table>
             <thead>

@@ -72,11 +72,22 @@
     });
   }
 
-  function updateChart(chart, buckets) {
-    if (!chart) return;
+  // Toggles the "No data yet" overlay (see dashboard.html's chart-empty
+  // divs) vs. the chart canvas itself, and only touches the Chart.js
+  // instance's data once there's something to show — a chart initialized
+  // against a hidden (display:none, zero-size) canvas needs an explicit
+  // resize once it becomes visible, or it stays blank.
+  function updateChart(chart, canvasId, buckets) {
+    const canvas = document.getElementById(canvasId);
+    const empty = document.getElementById(canvasId + "Empty");
+    const hasData = buckets && buckets.length > 0;
+    if (canvas) canvas.hidden = !hasData;
+    if (empty) empty.hidden = hasData;
+    if (!chart || !hasData) return;
     chart.data.labels = labels(buckets);
     chart.data.datasets[0].data = counts(buckets);
     chart.update();
+    chart.resize();
   }
 
   function refreshStats() {
@@ -91,10 +102,10 @@
         if (events) events.textContent = s.total_events;
         if (gps) gps.textContent = s.gps_captures;
         if (ips) ips.textContent = s.unique_ips;
-        updateChart(timeChart, s.events_by_day);
-        updateChart(countryChart, s.by_country);
-        updateChart(deviceChart, s.by_device);
-        updateChart(browserChart, s.by_browser);
+        updateChart(timeChart, "chartTime", s.events_by_day);
+        updateChart(countryChart, "chartCountry", s.by_country);
+        updateChart(deviceChart, "chartDevice", s.by_device);
+        updateChart(browserChart, "chartBrowser", s.by_browser);
       })
       .catch(() => {});
   }

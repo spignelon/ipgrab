@@ -1,6 +1,6 @@
 {{define "settings.html"}}
 <!doctype html>
-<html lang="en">
+<html lang="en"{{if eq .Theme "light"}} data-theme="light"{{else if eq .Theme "dark"}} data-theme="dark"{{end}}>
 <head>
   <title>{{if .Concealed}}Personal settings - Nextcloud{{else}}Settings — Netra{{end}}</title>
   {{template "head" .}}
@@ -14,6 +14,23 @@
 
     {{if .Notice}}<p class="notice">{{.Notice}}</p>{{end}}
     {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+
+    <section class="card">
+      <h3>Appearance</h3>
+      <p class="muted">
+        Auto follows your system's light/dark setting. Light and Dark override it for this
+        browser and everyone else using this admin, since it's saved server-side.
+      </p>
+      <form method="post" action="/admin/settings/theme" class="settings-form">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <div class="radio-row">
+          <label><input type="radio" name="theme" value="auto" {{if eq .Theme "auto"}}checked{{end}}> Auto</label>
+          <label><input type="radio" name="theme" value="light" {{if eq .Theme "light"}}checked{{end}}> Light</label>
+          <label><input type="radio" name="theme" value="dark" {{if eq .Theme "dark"}}checked{{end}}> Dark</label>
+        </div>
+        <button type="submit" class="btn btn-primary">Save appearance</button>
+      </form>
+    </section>
 
     <section class="card">
       <h3>Auto-refresh</h3>
@@ -120,7 +137,7 @@
 
         <button type="submit" class="btn btn-primary">Save webhook settings</button>
       </form>
-      <form method="post" action="/admin/settings/webhook/test" style="margin-top:10px;">
+      <form method="post" action="/admin/settings/webhook/test" class="mt-2.5">
         <input type="hidden" name="csrf_token" value="{{.CSRF}}">
         <button type="submit" class="btn btn-ghost">Send test notification</button>
       </form>

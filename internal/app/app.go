@@ -71,6 +71,7 @@ func NewMux(h *handlers.Handler, am *auth.Manager) http.Handler {
 	mux.HandleFunc("POST /admin/settings/webhook/test", am.RequireAuth(h.TestWebhook))
 	mux.HandleFunc("POST /admin/settings/geoip", am.RequireAuth(h.ToggleGeoIP))
 	mux.HandleFunc("POST /admin/settings/refresh", am.RequireAuth(h.SaveAutoRefresh))
+	mux.HandleFunc("POST /admin/settings/theme", am.RequireAuth(h.SaveTheme))
 
 	// Root: send to dashboard (or setup/login as appropriate).
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {

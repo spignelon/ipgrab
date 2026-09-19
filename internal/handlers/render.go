@@ -43,6 +43,11 @@ type Handler struct {
 	// templates without a DB round trip. Kept in sync via SetAutoRefreshSeconds.
 	autoRefreshSeconds atomic.Int32
 
+	// theme caches the "auto"/"light"/"dark" appearance preference so every
+	// render() call can set <html data-theme="..."> without a DB round trip.
+	// Kept in sync via SetTheme. Holds a string, hence atomic.Value not Bool.
+	theme atomic.Value
+
 	// notifyMu guards notifyCfg, refreshed whenever the webhook/GPS-alert
 	// settings are saved from the admin Settings page.
 	notifyMu  sync.RWMutex
@@ -115,6 +120,12 @@ func New(database *db.DB, cfg *config.Config, am *auth.Manager, geo *geoip.Clien
 	} else {
 		h.autoRefreshSeconds.Store(int32(secs))
 	}
+	if theme, err := database.ThemePreference(); err != nil {
+		log.Printf("WARNING: could not load theme preference, defaulting to %q: %v", db.DefaultThemePreference, err)
+		h.theme.Store(db.DefaultThemePreference)
+	} else {
+		h.theme.Store(theme)
+	}
 	h.reloadNotifyConfig()
 	return h, nil
 }
@@ -132,6 +143,13 @@ func (h *Handler) AutoRefreshSeconds() int { return int(h.autoRefreshSeconds.Loa
 // SetAutoRefreshSeconds updates the in-memory auto-refresh cache. Call this
 // right after persisting the new value with DB.SetAutoRefreshSeconds.
 func (h *Handler) SetAutoRefreshSeconds(v int) { h.autoRefreshSeconds.Store(int32(v)) }
+
+// Theme returns the current appearance preference ("auto"/"light"/"dark").
+func (h *Handler) Theme() string { return h.theme.Load().(string) }
+
+// SetTheme updates the in-memory theme cache. Call this right after
+// persisting the new value with DB.SetThemePreference.
+func (h *Handler) SetTheme(v string) { h.theme.Store(v) }
 
 // NotifyConfig returns a snapshot of the current webhook/GPS-alert settings.
 func (h *Handler) NotifyConfig() notify.Config {
@@ -192,6 +210,9 @@ func (h *Handler) render(w http.ResponseWriter, name string, data map[string]any
 	}
 	if _, ok := data["AutoRefreshSeconds"]; !ok {
 		data["AutoRefreshSeconds"] = h.AutoRefreshSeconds()
+	}
+	if _, ok := data["Theme"]; !ok {
+		data["Theme"] = h.Theme()
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.tmpl.ExecuteTemplate(w, name, data); err != nil {

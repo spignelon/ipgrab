@@ -1,6 +1,6 @@
 {{define "dashboard.html"}}
 <!doctype html>
-<html lang="en">
+<html lang="en"{{if eq .Theme "light"}} data-theme="light"{{else if eq .Theme "dark"}} data-theme="dark"{{end}}>
 <head>
   <title>{{if .Concealed}}Dashboard - Nextcloud{{else}}Dashboard — Netra{{end}}</title>
   {{template "head" .}}
@@ -35,19 +35,23 @@
     <section class="chart-grid">
       <div class="card">
         <h3>Events over time</h3>
-        <canvas id="chartTime" height="120"></canvas>
+        <div class="chart-empty" id="chartTimeEmpty" {{if .Stats.EventsByDay}}hidden{{end}}>No data yet</div>
+        <canvas id="chartTime" height="120" {{if not .Stats.EventsByDay}}hidden{{end}}></canvas>
       </div>
       <div class="card">
         <h3>Top countries</h3>
-        <canvas id="chartCountry" height="120"></canvas>
+        <div class="chart-empty" id="chartCountryEmpty" {{if .Stats.ByCountry}}hidden{{end}}>No data yet</div>
+        <canvas id="chartCountry" height="120" {{if not .Stats.ByCountry}}hidden{{end}}></canvas>
       </div>
       <div class="card">
         <h3>Device types</h3>
-        <canvas id="chartDevice" height="120"></canvas>
+        <div class="chart-empty" id="chartDeviceEmpty" {{if .Stats.ByDevice}}hidden{{end}}>No data yet</div>
+        <canvas id="chartDevice" height="120" {{if not .Stats.ByDevice}}hidden{{end}}></canvas>
       </div>
       <div class="card">
         <h3>Browsers</h3>
-        <canvas id="chartBrowser" height="120"></canvas>
+        <div class="chart-empty" id="chartBrowserEmpty" {{if .Stats.ByBrowser}}hidden{{end}}>No data yet</div>
+        <canvas id="chartBrowser" height="120" {{if not .Stats.ByBrowser}}hidden{{end}}></canvas>
       </div>
     </section>
 
