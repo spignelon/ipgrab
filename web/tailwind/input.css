@@ -1,0 +1,272 @@
+@import "tailwindcss";
+
+/* Scan the Go templates and the vanilla-JS files that build DOM via string
+   concatenation (dashboard.js/events.js/links.js all emit class names that
+   Tailwind's scanner needs to see to keep them in the compiled output). */
+@source "../templates";
+@source "../static/*.js";
+
+/* ---- Design tokens -----------------------------------------------------
+   Flat, minimalist, sharp-corner utility-UI. Dark mode is near-black
+   (OLED-friendly), light mode is flat/high-contrast — same principles, not
+   a different design language. A single restrained blue accent marks state
+   (active nav, primary actions, links, focus) and is never decorative.
+   Red/green are kept, but only as functional status colors (destructive
+   actions, on/off state) — not part of the "accent", which stays blue.
+   No radius tokens are defined on purpose: the absence of rounded-* utility
+   usage anywhere in this file *is* the "sharp corners everywhere" rule. */
+@theme {
+  --color-bg: #ffffff;
+  --color-surface: #f5f5f5;
+  --color-card: #ffffff;
+  --color-border: #d4d4d4;
+  --color-text: #0a0a0a;
+  --color-muted: #666666;
+  --color-label: #262626;
+  --color-input-bg: #ffffff;
+  --color-hover: #ececec;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-danger: #dc2626;
+  --color-danger-bg: #fee2e2;
+  --color-danger-bg-hover: #fecaca;
+  --color-on: #15803d;
+  --color-on-bg: #dcfce7;
+  --color-off: #6b7280;
+  --color-off-bg: #f0f0f0;
+  --color-badge-bg: #e0e7ff;
+  --color-badge-text: #3730a3;
+  --color-notice-bg: #fffbeb;
+  --color-notice-border: #fde68a;
+  --color-notice-text: #78350f;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Dark palette: applied automatically when the OS prefers dark and the page
+   hasn't been explicitly pinned to light, OR when explicitly set via
+   data-theme="dark" (the Settings > Appearance toggle, server-rendered). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: #000000;
+    --color-surface: #000000;
+    --color-card: #0a0a0a;
+    --color-border: #262626;
+    --color-text: #e5e5e5;
+    --color-muted: #8a8a8a;
+    --color-label: #c7c7c7;
+    --color-input-bg: #0a0a0a;
+    --color-hover: #141414;
+    --color-primary: #3b82f6;
+    --color-primary-hover: #60a5fa;
+    --color-danger: #f87171;
+    --color-danger-bg: #3a1919;
+    --color-danger-bg-hover: #4a1f1f;
+    --color-on: #4ade80;
+    --color-on-bg: #0f3324;
+    --color-off: #8a8a8a;
+    --color-off-bg: #1a1a1a;
+    --color-badge-bg: #1e2547;
+    --color-badge-text: #a5b4fc;
+    --color-notice-bg: #241d0a;
+    --color-notice-border: #6b5716;
+    --color-notice-text: #fbbf67;
+  }
+}
+:root[data-theme="dark"] {
+  --color-bg: #000000;
+  --color-surface: #000000;
+  --color-card: #0a0a0a;
+  --color-border: #262626;
+  --color-text: #e5e5e5;
+  --color-muted: #8a8a8a;
+  --color-label: #c7c7c7;
+  --color-input-bg: #0a0a0a;
+  --color-hover: #141414;
+  --color-primary: #3b82f6;
+  --color-primary-hover: #60a5fa;
+  --color-danger: #f87171;
+  --color-danger-bg: #3a1919;
+  --color-danger-bg-hover: #4a1f1f;
+  --color-on: #4ade80;
+  --color-on-bg: #0f3324;
+  --color-off: #8a8a8a;
+  --color-off-bg: #1a1a1a;
+  --color-badge-bg: #1e2547;
+  --color-badge-text: #a5b4fc;
+  --color-notice-bg: #241d0a;
+  --color-notice-border: #6b5716;
+  --color-notice-text: #fbbf67;
+}
+
+@layer base {
+  * { box-sizing: border-box; }
+  body { @apply m-0 bg-surface text-text font-sans; }
+  input, select { @apply text-text; }
+}
+
+/* ---- Component layer ----------------------------------------------------
+   Kept as semantic class names (not scattered inline utilities on every
+   element) so the many templates/JS files that already reference `.card`,
+   `.btn-primary`, etc. keep working — the classes are just fully redefined
+   here via @apply against the new tokens. New responsive/mobile behavior is
+   added directly as utilities on top of these where a fix needs it. */
+@layer components {
+  .topbar {
+    @apply sticky top-0 z-40 flex items-center gap-4 md:gap-6 bg-card border-b border-border px-4 md:px-6 py-3;
+  }
+  .topbar .brand { @apply font-bold text-lg no-underline text-text flex items-center gap-2; }
+  .topbar nav { @apply hidden md:flex gap-4 flex-1; }
+  .topbar nav a { @apply text-muted no-underline font-medium px-1 py-1.5; }
+  .topbar nav a.active, .topbar nav a:hover { @apply text-primary; }
+  .topbar-mobile-nav { @apply flex md:hidden flex-col gap-1 border-t border-border bg-card px-4 py-2; }
+  .topbar-mobile-nav a { @apply text-muted no-underline font-medium px-1 py-2; }
+  .topbar-mobile-nav a.active { @apply text-primary; }
+  .topbar-mobile-nav[hidden] { @apply hidden; }
+  .nav-toggle {
+    @apply md:hidden inline-flex items-center justify-center w-9 h-9 border border-border bg-transparent text-text cursor-pointer;
+  }
+  .logout-form { @apply m-0; }
+
+  .page { @apply max-w-[1080px] mx-auto px-4 md:px-5 pt-6 pb-16; }
+  .page-header { @apply flex flex-wrap items-center justify-between gap-3 mb-5; }
+  .page-header h1 { @apply my-1; }
+  .back-link { @apply text-muted no-underline text-sm; }
+
+  .card { @apply bg-card border border-border p-4 md:p-5 mb-5; }
+  .card h3 { @apply mt-0; }
+  .card-header-row { @apply flex items-center justify-between gap-3 mb-1; }
+  .card-header-row h3 { @apply m-0; }
+
+  .stat-row { @apply grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5; }
+  .stat-card { @apply bg-card border border-border p-4 text-center; }
+  .stat-num { @apply block text-2xl font-bold text-primary; }
+  .stat-label { @apply text-xs text-muted uppercase tracking-wide; }
+
+  .chart-grid { @apply grid grid-cols-1 md:grid-cols-2 gap-5 mb-5; }
+  .chart-empty {
+    @apply flex items-center justify-center h-[180px] text-muted text-sm border border-dashed border-border;
+  }
+
+  .table-wrap { @apply overflow-x-auto; }
+  table { @apply w-full border-collapse text-sm; }
+  th, td { @apply text-left px-2.5 py-2 border-b border-border whitespace-nowrap; }
+  th { @apply text-muted font-semibold text-xs uppercase; }
+  tbody tr:hover { @apply bg-hover; }
+
+  .badge {
+    @apply inline-block bg-badge-bg text-badge-text text-xs px-2 py-0.5 font-semibold;
+  }
+  .pill { @apply inline-block text-xs px-2 py-0.5 font-semibold; }
+  .pill-on { @apply bg-on-bg text-on; }
+  .pill-off { @apply bg-off-bg text-off; }
+
+  .btn {
+    @apply inline-block border-0 px-4 py-2.5 font-semibold text-sm cursor-pointer no-underline;
+  }
+  .btn:disabled { @apply opacity-45 cursor-not-allowed; }
+  .btn-primary { @apply bg-primary text-white; }
+  .btn-primary:not(:disabled):hover { @apply bg-primary-hover; }
+  .btn-ghost { @apply bg-transparent text-text border border-border; }
+  .btn-ghost:not(:disabled):hover { @apply bg-hover; }
+  .btn-danger { @apply bg-danger-bg text-danger; }
+  .btn-danger:not(:disabled):hover { @apply bg-danger-bg-hover; }
+  .btn-sm { @apply px-2.5 py-1.5 text-xs; }
+  .row-actions { @apply flex gap-1.5; }
+  .row-actions form { @apply m-0 inline; }
+
+  form.create-form { @apply grid grid-cols-1 md:grid-cols-2 gap-3.5; }
+  form.create-form .field-group { @apply col-span-full grid grid-cols-1 md:grid-cols-2 gap-3.5; }
+  form.create-form label { @apply flex flex-col gap-1 text-sm font-semibold text-label; }
+  form.create-form button { @apply col-span-full justify-self-start; }
+  label { @apply flex flex-col gap-1 text-sm font-semibold text-label mb-3; }
+  input, select {
+    @apply text-sm px-2.5 py-2 border border-border bg-input-bg font-normal w-full;
+  }
+  input.mono, .mono { @apply font-mono; }
+  input.full-width { @apply w-full; }
+  .url-cell input { @apply w-[220px]; }
+  .share-url-row { @apply flex gap-2 items-stretch; }
+  .share-url-row input { @apply flex-1; }
+  .share-url-row .qr-btn { @apply shrink-0; }
+
+  .muted { @apply text-muted; }
+  .small { @apply text-xs; }
+  .error { @apply text-danger bg-danger-bg px-3 py-2; }
+  .notice { @apply bg-notice-bg border border-notice-border text-notice-text px-3.5 py-2.5 text-sm; }
+
+  .auth-body { @apply flex items-center justify-center min-h-screen; }
+  .auth-card { @apply bg-card border border-border p-8 w-[360px] max-w-[90vw]; }
+  .auth-card h1 { @apply text-center mt-0; }
+  .auth-logo { @apply block mx-auto mb-3 h-11 w-auto; }
+
+  .qr-btn { @apply inline-flex items-center justify-center px-2.5 py-1.5; }
+  .qr-btn svg { @apply block; }
+  .qr-modal {
+    @apply fixed inset-0 bg-black/50 flex items-center justify-center z-[1000] p-4;
+  }
+  .qr-modal[hidden] { @apply hidden; }
+  .qr-modal-card { @apply bg-card border border-border p-6 relative text-center max-w-[90vw]; }
+  .qr-modal-card h3 { @apply mt-0 mb-4 text-[15px]; }
+  .qr-modal-card img { @apply block bg-white p-2 max-w-full h-auto; }
+  .qr-modal-close {
+    @apply absolute top-2 right-3 bg-transparent border-0 text-2xl leading-none cursor-pointer text-muted;
+  }
+  .qr-modal-close:hover { @apply text-text; }
+
+  .event-modal {
+    @apply fixed inset-0 bg-black/50 flex items-start justify-center z-[1000] p-4 md:py-10 overflow-y-auto;
+  }
+  .event-modal[hidden] { @apply hidden; }
+  .event-modal-card { @apply bg-card border border-border p-4 md:p-6 relative w-full max-w-[560px]; }
+  .event-modal-card h3 { @apply mt-0 mb-1 text-base; }
+  .event-modal-close {
+    @apply absolute top-2 right-3 bg-transparent border-0 text-2xl leading-none cursor-pointer text-muted;
+  }
+  .event-modal-close:hover { @apply text-text; }
+  .event-modal-section { @apply mt-4; }
+  .event-modal-section h4 { @apply mt-0 mb-2 text-xs uppercase tracking-wide text-muted; }
+  /* Stacked label/value on narrow screens (the mobile bug fix: a fixed
+     130px label column left ~100px for values on a 375px phone), side by
+     side again from sm: up. */
+  .event-modal-grid { @apply grid grid-cols-1 sm:grid-cols-[130px_1fr] gap-x-3 gap-y-1.5 text-[13px]; }
+  .event-modal-grid dt { @apply text-muted sm:mb-0 -mb-1; }
+  .event-modal-grid dd { @apply m-0 break-words; }
+  .events-row-clickable { @apply cursor-pointer; }
+  .events-row-clickable:hover { @apply bg-hover; }
+
+  .settings-form h4 { @apply mt-4 mb-1 text-sm; }
+  .checkbox-label { @apply flex-row! items-center gap-2! font-normal!; }
+  .checkbox-label input[type="checkbox"] { @apply w-auto; }
+  .radio-row { @apply flex flex-wrap gap-4; }
+  .radio-row label { @apply flex-row! items-center gap-2! font-normal! mb-0!; }
+  .radio-row input[type="radio"] { @apply w-auto; }
+
+  .events-toolbar { @apply flex gap-2.5 mb-3.5 flex-wrap items-center; }
+  .events-toolbar input[type="search"] { @apply flex-1 min-w-[200px] mb-0; }
+  .events-toolbar select { @apply mb-0; }
+  .events-toolbar button { @apply whitespace-nowrap; }
+  .events-sentinel { @apply h-px; }
+  .events-status { @apply text-center text-muted text-sm py-3; }
+  .select-cell, .event-delete-cell { @apply w-px whitespace-nowrap; }
+  .event-delete-btn { @apply inline-flex items-center justify-center px-2 py-1.5; }
+  .event-delete-btn svg { @apply block; }
+
+  /* Conceal-mode navbar logo: the Nextcloud navbar background stays blue
+     (disguise intact), but the logo itself swaps back to Netra's — which
+     is blue-on-transparent and invisible without contrast behind it, hence
+     the small black badge. */
+  .conceal-logo-badge { @apply bg-black p-1 inline-flex items-center justify-center; }
+
+  /* Conceal-mode navbar: Nextcloud blue background overrides the normal
+     .topbar/.topbar-mobile-nav surface color; nav text goes white to read
+     on that blue, same as the disguise always intended. */
+  .topbar-conceal, .topbar-conceal.topbar-mobile-nav {
+    background-color: #0082c9 !important;
+    border-color: #006ba3 !important;
+  }
+  .topbar-conceal nav a, .topbar-conceal.topbar-mobile-nav a { @apply text-white!; }
+  .topbar-conceal nav a.active, .topbar-conceal.topbar-mobile-nav a.active { @apply text-white! underline; }
+  .topbar-conceal .btn-ghost { @apply text-white! border-white/40!; }
+  .topbar-conceal .nav-toggle { @apply text-white! border-white/40!; }
+}

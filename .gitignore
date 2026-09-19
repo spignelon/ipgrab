@@ -32,3 +32,9 @@ HANDOFF.md
 
 # Misc local envs that sometimes end up in project dirs.
 .venv/
+
+# Tailwind build tooling (web/tailwind/) — Node.js is never part of the
+# runtime binary or Docker image, only used to compile web/static/app.css
+# from web/tailwind/input.css. See CLAUDE.md for the rebuild command.
+web/tailwind/node_modules/
+web/tailwind/package-lock.json

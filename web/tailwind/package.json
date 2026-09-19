@@ -1,0 +1,9 @@
+{
+  "name": "netra-tailwind-build",
+  "private": true,
+  "description": "Build-time only - compiles web/tailwind/input.css into web/static/app.css. Never part of the runtime binary; see CLAUDE.md for the rebuild command.",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3"
+  }
+}
