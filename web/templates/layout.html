@@ -13,23 +13,31 @@
 
 {{define "topnav"}}
 {{if .Concealed}}
-<header class="topbar" style="background:#0082c9;border-bottom-color:#006ba3;">
-  <a class="brand" href="/admin" style="display:flex;align-items:center;gap:8px;">
-    <img src="/core/img/logo/logo.svg" alt="Nextcloud" style="height:20px;width:auto;">
+<header class="topbar topbar-conceal">
+  <a class="brand" href="/admin">
+    <span class="conceal-logo-badge"><img src="/static/logo.svg" alt="Netra" style="height:18px;width:auto;"></span>
   </a>
   <nav>
-    <a href="/admin" class="{{if eq .Nav "dashboard"}}active{{end}}" style="color:#fff;">Dashboard</a>
-    <a href="/admin/links" class="{{if eq .Nav "links"}}active{{end}}" style="color:#fff;">Links</a>
-    <a href="/admin/events" class="{{if eq .Nav "events"}}active{{end}}" style="color:#fff;">Activity</a>
-    <a href="/admin/settings" class="{{if eq .Nav "settings"}}active{{end}}" style="color:#fff;">Settings</a>
+    <a href="/admin" class="{{if eq .Nav "dashboard"}}active{{end}}">Dashboard</a>
+    <a href="/admin/links" class="{{if eq .Nav "links"}}active{{end}}">Links</a>
+    <a href="/admin/events" class="{{if eq .Nav "events"}}active{{end}}">Events</a>
+    <a href="/admin/settings" class="{{if eq .Nav "settings"}}active{{end}}">Settings</a>
   </nav>
+  <button type="button" class="nav-toggle" aria-label="Menu" aria-expanded="false"
+    onclick="var n=document.getElementById('mobileNav'); var open=n.hidden; n.hidden=!open; this.setAttribute('aria-expanded', open);">&#9776;</button>
   <form method="post" action="/logout" class="logout-form">
-    <button type="submit" class="btn btn-ghost" style="color:#fff;border-color:rgba(255,255,255,.4);">Log out</button>
+    <button type="submit" class="btn btn-ghost">Log out</button>
   </form>
 </header>
+<nav id="mobileNav" class="topbar-mobile-nav topbar-conceal" hidden>
+  <a href="/admin" class="{{if eq .Nav "dashboard"}}active{{end}}">Dashboard</a>
+  <a href="/admin/links" class="{{if eq .Nav "links"}}active{{end}}">Links</a>
+  <a href="/admin/events" class="{{if eq .Nav "events"}}active{{end}}">Events</a>
+  <a href="/admin/settings" class="{{if eq .Nav "settings"}}active{{end}}">Settings</a>
+</nav>
 {{else}}
 <header class="topbar">
-  <a class="brand" href="/admin" style="display:flex;align-items:center;gap:8px;">
+  <a class="brand" href="/admin">
     <img src="/static/logo.svg" alt="Netra" style="height:22px;width:auto;">
     Netra
   </a>
@@ -39,9 +47,17 @@
     <a href="/admin/events" class="{{if eq .Nav "events"}}active{{end}}">Events</a>
     <a href="/admin/settings" class="{{if eq .Nav "settings"}}active{{end}}">Settings</a>
   </nav>
+  <button type="button" class="nav-toggle" aria-label="Menu" aria-expanded="false"
+    onclick="var n=document.getElementById('mobileNav'); var open=n.hidden; n.hidden=!open; this.setAttribute('aria-expanded', open);">&#9776;</button>
   <form method="post" action="/logout" class="logout-form">
     <button type="submit" class="btn btn-ghost">Log out</button>
   </form>
 </header>
+<nav id="mobileNav" class="topbar-mobile-nav" hidden>
+  <a href="/admin" class="{{if eq .Nav "dashboard"}}active{{end}}">Dashboard</a>
+  <a href="/admin/links" class="{{if eq .Nav "links"}}active{{end}}">Links</a>
+  <a href="/admin/events" class="{{if eq .Nav "events"}}active{{end}}">Events</a>
+  <a href="/admin/settings" class="{{if eq .Nav "settings"}}active{{end}}">Settings</a>
+</nav>
 {{end}}
 {{end}}
